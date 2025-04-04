@@ -1,14 +1,13 @@
 // frontend/src/api/userApi.js
-import apiClient from './apiClient'; // Import the central configured Axios client
+import apiClient from './apiClient';
 
 /**
  * Fetches the list of users for the currently authenticated admin's company.
- * Assumes the backend API at GET /api/users filters by the admin's company.
  * @returns {Promise<Array<object>>} An array of user objects.
  */
 export const getCompanyUsers = async () => {
     try {
-        // Token is automatically added by the apiClient interceptor
+        // Token added by interceptor, admin role checked by backend route
         const response = await apiClient.get('/users');
         return response.data;
     } catch (error) {
@@ -24,7 +23,7 @@ export const getCompanyUsers = async () => {
  */
 export const createUser = async (userData) => {
     try {
-        // Token is automatically added by the apiClient interceptor
+        // Token added by interceptor, admin role checked by backend route
         const response = await apiClient.post('/users', userData);
         return response.data;
     } catch (error) {
@@ -33,6 +32,37 @@ export const createUser = async (userData) => {
     }
 };
 
-// Add functions for updating/deleting users later if needed
-// export const updateUser = async (userId, updateData) => { ... }
-// export const deleteUser = async (userId) => { ... }
+/**
+ * Updates an existing user (as an admin).
+ * @param {string} userId - The ID of the user to update.
+ * @param {object} updateData - { name?, password?, role? } - Password should only be sent if changing.
+ * @returns {Promise<object>} The updated user object.
+ */
+export const updateUser = async (userId, updateData) => {
+     if (!userId) throw new Error("User ID is required for updating.");
+    try {
+        // Token added by interceptor, admin role checked by backend route
+        const response = await apiClient.put(`/users/${userId}`, updateData);
+        return response.data;
+    } catch (error) {
+        console.error(`API Error updating user ${userId}:`, error.response?.data || error.message);
+        throw error.response?.data || error;
+    }
+};
+
+/**
+ * Deletes a user (as an admin).
+ * @param {string} userId - The ID of the user to delete.
+ * @returns {Promise<void>} Resolves on successful deletion.
+ */
+export const deleteUser = async (userId) => {
+     if (!userId) throw new Error("User ID is required for deleting.");
+    try {
+        // Token added by interceptor, admin role checked by backend route
+        // DELETE requests usually return 204 No Content on success
+        await apiClient.delete(`/users/${userId}`);
+    } catch (error) {
+        console.error(`API Error deleting user ${userId}:`, error.response?.data || error.message);
+        throw error.response?.data || error;
+    }
+};

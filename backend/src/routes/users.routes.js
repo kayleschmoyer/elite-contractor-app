@@ -1,24 +1,29 @@
 // backend/src/routes/users.routes.js
 import { Router } from 'express';
 import UserController from '../controllers/users.controller.js';
-import authMiddleware from '../middleware/authMiddleware.js'; // Middleware to check login token
-import { isAdmin } from '../middleware/authorizationMiddleware.js'; // Middleware to check ADMIN role
+import authMiddleware from '../middleware/authMiddleware.js';
+import { isAdmin } from '../middleware/authorizationMiddleware.js'; // Assuming isAdmin is here
 
 const router = Router();
 
-// Apply auth middleware FIRST to all user routes
+// Apply auth and admin checks to ALL user management routes
 router.use(authMiddleware);
-// Apply isAdmin middleware NEXT to all user routes (only Admins can manage users)
 router.use(isAdmin);
 
-// Define routes (already protected by middleware above)
+// Define routes relative to /api/users
 
-// POST /api/users - Create a new user (Admin only)
+// POST /api/users - Create a new user
 router.post('/', UserController.createUser);
 
-// GET /api/users - Get users in the admin's company (Admin only)
+// GET /api/users - Get users in the admin's company
 router.get('/', UserController.getCompanyUsers);
 
-// Add routes for GET /:id, PUT /:id, DELETE /:id later
+// --- NEW: Update and Delete Routes ---
+
+// PUT /api/users/:id - Update a user by ID
+router.put('/:id', UserController.updateUser);
+
+// DELETE /api/users/:id - Delete a user by ID
+router.delete('/:id', UserController.deleteUser);
 
 export default router;
