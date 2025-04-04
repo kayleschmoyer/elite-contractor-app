@@ -1,6 +1,6 @@
 // backend/src/controllers/projects.controller.js
 import ProjectService from '../services/projects.service.js';
-import logger from '../utils/logger.js'; // Assuming you have this utility
+import logger from '../utils/logger.js';
 
 /**
  * Get all projects belonging to the currently authenticated user.

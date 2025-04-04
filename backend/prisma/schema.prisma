@@ -9,13 +9,21 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// --- Define Roles Enum ---
+// --- Enums ---
 enum Role {
-  ADMIN // Can manage users within their company, etc.
-  USER  // Standard user with limited permissions
-  // Add other roles later if needed (e.g., MANAGER, VIEWER)
+  ADMIN
+  USER
 }
 
+// Enum for Task Status (NEW)
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  BLOCKED
+}
+
+// --- Models ---
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -23,41 +31,78 @@ model User {
   password  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  role      Role     @default(USER)
+  companyId String
 
-  // --- New Fields ---
-  role      Role     @default(USER) // Default new users to standard role
-  companyId String                 // Identifier for the company the user belongs to
+  // Relation to Projects authored by user
+  projects Project[]
 
-  // --- Existing Relation ---
-  projects Project[] // Projects created by this user
+  // Relation to Tasks assigned to user (NEW)
+  assignedTasks Task[] @relation("AssignedTasks") // Named relation for clarity
 }
 
 model Project {
   id        String   @id @default(cuid())
   name      String
-  client    String
-  status    String
+  status    String // Maybe change this to an enum later too?
   address   String?
   notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  // --- Existing Relation ---
   author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
   authorId  String?
+  companyId String
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId  String?
 
-  // --- New Field ---
-  companyId String // Identifier for the company this project belongs to
-  // Optional: Add an index for faster querying by companyId
-  // @@index([companyId])
+  // Relation to Tasks within this project (NEW)
+  tasks     Task[]
+
+  @@index([companyId])
+  @@index([companyId, clientId])
 }
 
-// --- Optional: Define a Company model later ---
-// model Company {
-//   id      String    @id @default(cuid())
-//   name    String
-//   users   User[]    // Users belonging to this company
-//   projects Project[] // Projects belonging to this company
-//   // ... other company details
-// }
-// If you add a Company model, change companyId fields above to link to it via @relation
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  companyId String
+  projects  Project[]
+
+  @@index([companyId])
+  // @@unique([companyId, name]) // Optional unique constraint
+}
+
+// --- NEW Task Model ---
+model Task {
+  id          String     @id @default(cuid())
+  title       String     // Required title/description of the task
+  status      TaskStatus @default(TODO) // Use the enum, default to TODO
+  dueDate     DateTime?  // Optional due date
+  notes       String?    // Optional additional notes
+  priority    Int?       // Optional priority (e.g., 1-5)
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relation: Task belongs to one company (via Project)
+  companyId   String     // Required: For easier scoping/indexing
+  // We could enforce this matches Project's companyId via application logic
+
+  // Relation: Task must belong to one project
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade) // Delete task if project deleted
+  projectId   String     // Required foreign key
+
+  // Relation: Task can be assigned to one user (optional)
+  assignee    User?      @relation("AssignedTasks", fields: [assigneeId], references: [id], onDelete: SetNull) // Named relation matching User model
+  assigneeId  String?    // Optional foreign key
+
+  // Optional: Add indexes
+  @@index([companyId])
+  @@index([projectId])
+  @@index([assigneeId])
+}

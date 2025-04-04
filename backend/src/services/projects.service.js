@@ -1,50 +1,51 @@
 // backend/src/services/projects.service.js
-import prisma from '../config/db.js'; // Import the Prisma client instance
-import logger from '../utils/logger.js'; // Import logger utility
+import prisma from '../config/db.js';
+import logger from '../utils/logger.js';
+
+// Helper to select client fields to return consistently
+const clientSelection = {
+    select: {
+        id: true,
+        name: true,
+    }
+};
 
 /**
- * Gets all projects belonging to a specific user.
+ * Gets all projects belonging to a specific user, including linked client name.
  * @param {string} userId - The ID of the user whose projects to retrieve.
- * @returns {Promise<Array<object>>} An array of project objects belonging to the user.
- * @throws {Error} If there's an error querying the database.
+ * @returns {Promise<Array<object>>}
  */
 const getAllProjects = async (userId) => {
-    if (!userId) {
-        // Should be caught by controller, but good to be defensive
-        throw new Error('User ID is required to fetch projects.');
-    }
+    if (!userId) throw new Error('User ID is required to fetch projects.');
     try {
         const projects = await prisma.project.findMany({
-            // Filter projects where the authorId matches the provided userId
-            where: {
-                authorId: userId
+            where: { authorId: userId },
+            include: { // Include related Client data
+                client: clientSelection
             },
-            orderBy: {
-                createdAt: 'desc', // Optional: Order projects by creation date, newest first
-            }
+            orderBy: { createdAt: 'desc' }
         });
         return projects;
     } catch (error) {
         logger.error(`Error fetching projects for user ${userId}:`, error);
-        // Re-throw a more generic error or handle specific Prisma errors
         throw new Error('Could not retrieve projects from database.');
     }
 };
 
 /**
- * Gets a single project by its ID.
- * Note: Ownership check is primarily handled in the controller in this iteration.
- * @param {string} id - The ID of the project to retrieve.
- * @returns {Promise<object|null>} The project object if found, otherwise null.
- * @throws {Error} If there's an error querying the database.
+ * Gets a single project by its ID, including linked client name.
+ * @param {string} id - Project ID.
+ * @returns {Promise<object|null>}
  */
 const getProjectById = async (id) => {
      try {
         const project = await prisma.project.findUnique({
             where: { id: id },
-            // Ensure necessary fields like authorId are selected if not default
+            include: { // Include related Client data
+                client: clientSelection
+            }
         });
-        return project; // Prisma returns null if findUnique doesn't find a record
+        return project;
     } catch (error) {
         logger.error(`Error fetching project by ID ${id}:`, error);
         throw new Error('Could not retrieve project details from database.');
@@ -52,99 +53,124 @@ const getProjectById = async (id) => {
 };
 
 /**
- * Creates a new project and associates it with the provided user ID.
- * @param {object} projectData - Data for the new project (e.g., { name, client, status, ...}).
+ * Creates a new project linked to a user and potentially a client.
+ * Assigns the project to the user's company.
+ * @param {object} projectData - Data from req body { name, status, clientId?, address?, notes? }
  * @param {string} userId - The ID of the user creating the project.
- * @returns {Promise<object>} The newly created project object.
- * @throws {Error} If validation fails or there's an error saving to the database.
+ * @returns {Promise<object>} The newly created project object including client info.
  */
 const createProject = async (projectData, userId) => {
-    if (!userId) {
-        throw new Error('User ID is required to create a project.');
-    }
+    if (!userId) throw new Error('User ID is required to create a project.');
     try {
-        // Basic validation example (can be expanded with libraries like Zod/Joi)
-        if (!projectData.name || !projectData.client || !projectData.status) {
-            // Throwing error here will be caught by the controller's catch block
-            throw new Error('Missing required project fields: name, client, status');
+        // Basic validation
+        if (!projectData.name || !projectData.status) {
+            throw new Error('Missing required project fields: name, status');
         }
 
+        // Handle optional clientId: convert empty string from form to null for DB
+        const clientId = projectData.clientId || null;
+
+        // --- FETCH USER TO GET companyId --- (This was missing/incorrect before)
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { companyId: true } // Only select companyId
+        });
+        if (!user || !user.companyId) {
+            // If user somehow has no companyId associated
+            throw new Error('Could not determine user company to create project.');
+        }
+        // --- END FETCH USER ---
+
+        // Create the project using the fetched companyId
         const newProject = await prisma.project.create({
             data: {
                 name: projectData.name,
-                client: projectData.client,
                 status: projectData.status,
-                address: projectData.address, // Will be null if not provided
-                notes: projectData.notes,     // Will be null if not provided
-                // --- Link to the author ---
-                authorId: userId
+                address: projectData.address,
+                notes: projectData.notes,
+                authorId: userId,         // Link to the author
+                companyId: user.companyId, // <-- Use the companyId from the user record
+                clientId: clientId,       // Link to the client (can be null)
             },
+            include: { // Include client data in the response
+                client: clientSelection
+            }
         });
+
+        logger.info(`Project created: ${newProject.name} for user ${userId} in company ${user.companyId}`);
         return newProject;
+
     } catch (error) {
         logger.error(`Error creating project for user ${userId}:`, error);
-        // Handle potential Prisma-specific errors (e.g., unique constraints) if necessary
-        // Re-throw a more generic error
+        // Handle potential foreign key error if invalid clientId provided
+        if (error.code === 'P2003' && error.meta?.field_name?.includes('clientId')) {
+             throw new Error('Invalid Client ID provided.'); // Controller -> 400
+        }
+        // Throw the generic error for the controller's final catch block
         throw new Error('Could not save project to database.');
     }
 };
 
 /**
- * Updates an existing project by its ID.
- * Note: Ownership check should be performed in the controller *before* calling this function.
+ * Updates an existing project by its ID. Ownership checked in controller.
  * @param {string} id - The ID of the project to update.
- * @param {object} updateData - An object containing the fields to update.
- * @returns {Promise<object|null>} The updated project object, or null if the project was not found.
- * @throws {Error} If there's an error updating the database.
+ * @param {object} updateData - An object containing the fields to update, potentially including clientId.
+ * @returns {Promise<object|null>} The updated project object including client info, or null if not found.
  */
  const updateProject = async (id, updateData) => {
     try {
-        // Prisma's update throws P2025 error if record to update not found.
+        // Prepare data, handle clientId explicitly to allow setting it to null
+        const dataToUpdate = { ...updateData };
+        if (updateData.hasOwnProperty('clientId')) {
+            dataToUpdate.clientId = updateData.clientId || null; // Allow unsetting client
+        }
+        // Prevent critical fields from being changed via update if necessary
+        delete dataToUpdate.id;
+        delete dataToUpdate.authorId;
+        delete dataToUpdate.companyId;
+
         const updatedProject = await prisma.project.update({
             where: { id: id },
-            data: updateData, // Only includes fields to be changed
+            data: dataToUpdate,
+            include: { // Include client data in the response
+                client: clientSelection
+            }
         });
         return updatedProject;
     } catch (error) {
          logger.error(`Error updating project ${id} in DB:`, error);
-         // Check for Prisma's specific "Record not found" error
-         if (error.code === 'P2025') {
-             // 'Record to update not found.' - Service layer indicates not found by returning null.
+         if (error.code === 'P2025') { // Record not found
              return null;
          }
-         // Re-throw other database errors
+         if (error.code === 'P2003' && error.meta?.field_name?.includes('clientId')) {
+             throw new Error('Invalid Client ID provided for update.'); // Controller -> 400
+         }
         throw new Error('Could not update project in database.');
     }
 };
 
 /**
- * Deletes a project by its ID.
- * Note: Ownership check should be performed in the controller *before* calling this function.
+ * Deletes a project by its ID. Ownership checked in controller.
  * @param {string} id - The ID of the project to delete.
- * @returns {Promise<boolean>} True if the project was successfully deleted, false if it was not found.
- * @throws {Error} If there's an error deleting from the database.
+ * @returns {Promise<boolean>} True if deleted, false if not found.
  */
 const deleteProject = async (id) => {
     try {
-        // Prisma's delete throws P2025 error if record to delete not found.
         await prisma.project.delete({
             where: { id: id },
         });
-        return true; // Indicate successful deletion
+        return true;
     } catch (error) {
          logger.error(`Error deleting project ${id} from DB:`, error);
-         // Check for Prisma's specific "Record not found" error
-         if (error.code === 'P2025') {
-             // 'Record to delete not found.' - Service layer indicates not found by returning false.
+         if (error.code === 'P2025') { // Record not found
              return false;
          }
-         // Re-throw other database errors
         throw new Error('Could not delete project from database.');
     }
 };
 
 
-// Export all service functions
+// Export the service object
 const ProjectService = {
     getAllProjects,
     getProjectById,

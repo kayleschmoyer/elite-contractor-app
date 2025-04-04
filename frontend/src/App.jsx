@@ -1,12 +1,15 @@
 // frontend/src/App.jsx
 import React from 'react';
+// Make sure Outlet is imported if using nested routes within admin/other sections later
 import { Routes, Route, Link, Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext'; // Import authentication context hook
 
 // --- Import Page/Feature Components ---
 import ProjectList from './features/projects/ProjectList';
 import LoginPage from './pages/LoginPage';
-import UserManagementPage from './pages/admin/UserManagementPage'; // Import the new admin page
+import UserManagementPage from './pages/admin/UserManagementPage';
+import ClientListPage from './pages/ClientListPage';
+import ProjectDetailPage from './pages/ProjectDetailPage'; // <-- Import Project Detail Page
 
 // --- Import Helper Components ---
 import LoadingSpinner from './components/common/LoadingSpinner'; // Adjust path if needed
@@ -67,7 +70,12 @@ function App() {
       <nav style={navStyle}>
          <div style={navGroupStyle}> {/* Left group */}
             {/* Link to home/projects always visible */}
-            <Link to="/" style={navLinkStyle}>Home/Projects</Link>
+            <Link to="/" style={navLinkStyle}>Projects</Link> {/* Updated label */}
+
+            {/* --- Clients Link (visible if logged in) --- */}
+            {isAuthenticated && (
+                <Link to="/clients" style={navLinkStyle}>Clients</Link>
+            )}
 
             {/* Conditional Admin Link */}
             {isAuthenticated && user?.role === 'ADMIN' && (
@@ -105,8 +113,12 @@ function App() {
             {/* Standard Authenticated Routes */}
             <Route path="/" element={<ProjectList />} />
             <Route path="/projects" element={<ProjectList />} />
-            {/* Add other standard user routes here (e.g., project details, settings) */}
-            {/* <Route path="/projects/:id" element={<ProjectDetailPage />} /> */}
+            <Route path="/clients" element={<ClientListPage />} />
+
+            {/* --- Add Project Detail Route --- */}
+            {/* The ':id' part makes 'id' available as a URL parameter */}
+            <Route path="/projects/:id" element={<ProjectDetailPage />} />
+            {/* --- End Project Detail Route --- */}
 
 
             {/* Admin-Only Protected Routes */}
