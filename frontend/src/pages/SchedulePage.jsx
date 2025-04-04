@@ -1,32 +1,52 @@
 // frontend/src/pages/SchedulePage.jsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { getProjects } from '../api/projectApi'; // API for projects
-import { getCompanyScheduleTasks } from '../api/taskApi'; // API for dated tasks
+import { Link, useNavigate } from 'react-router-dom'; // Use useNavigate for click handling
+import { getProjects } from '../api/projectApi';
+import { getCompanyScheduleTasks } from '../api/taskApi';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+
+// --- react-big-calendar imports ---
+import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
+import format from 'date-fns/format';
+import parse from 'date-fns/parse';
+import startOfWeek from 'date-fns/startOfWeek';
+import getDay from 'date-fns/getDay';
+import enUS from 'date-fns/locale/en-US';
+// --- END react-big-calendar imports ---
 
 // --- Styles ---
 const errorBoxStyle = { color: 'var(--color-error)', marginBottom: 'var(--spacing-md)', padding: 'var(--spacing-md)', border: '1px solid var(--color-error)', borderRadius: 'var(--border-radius)', backgroundColor: 'rgba(220, 53, 69, 0.1)' };
-const scheduleListStyle = { listStyle: 'none', padding: 0 };
-const scheduleItemStyle = { border: '1px solid var(--color-border)', padding: 'var(--spacing-md)', marginBottom: 'var(--spacing-md)', borderRadius: 'var(--border-radius)'};
-const itemHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-xs)'};
-const itemTypeStyle = { fontWeight: 'bold', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginRight: 'var(--spacing-sm)'};
-const itemTitleStyle = { fontSize: 'var(--font-size-lg)', fontWeight: 'bold'};
-const itemLinkStyle = { textDecoration: 'none', color: 'inherit' };
-const itemMetaStyle = { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginTop: 'var(--spacing-xs)'};
-const dateStyle = { marginRight: 'var(--spacing-md)'};
+// Style for calendar height - important for display
+const calendarContainerStyle = { height: '70vh', marginTop: 'var(--spacing-md)', width: '100%' }; // Adjust height as needed
 // --- End Styles ---
 
+
+// --- Setup date-fns localizer ---
+const locales = {
+  'en-US': enUS,
+};
+const localizer = dateFnsLocalizer({
+  format,
+  parse,
+  startOfWeek,
+  getDay,
+  locales,
+});
+// --- END localizer setup ---
+
+
 function SchedulePage() {
-    // State holds combined list of { type: 'project'|'task', ...data }
-    const [scheduledItems, setScheduledItems] = useState([]);
+    // State holds events for the calendar { title, start, end, resource }
+    const [calendarEvents, setCalendarEvents] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
+    const navigate = useNavigate(); // Hook for navigation
 
-    // Fetch, process, and sort data
+    // Fetch, process, and format data for the calendar
     const fetchScheduleData = useCallback(async () => {
         setIsLoading(true);
         setError(null);
+        setCalendarEvents([]); // Clear previous events
         try {
             // Fetch projects and dated tasks concurrently
             const [projectsResult, tasksResult] = await Promise.all([
@@ -36,70 +56,80 @@ function SchedulePage() {
 
             // 1. Process Projects: Filter for dates and map to common format
             const datedProjects = (projectsResult || [])
-                .filter(p => p.startDate || p.endDate)
-                .map(p => ({
-                    id: p.id,
-                    type: 'project',
-                    title: p.name, // Use 'title' for common sorting/display
-                    startDate: p.startDate,
-                    endDate: p.endDate,
-                    status: p.status, // Include status
-                    related: { clientName: p.client?.name }, // Add related info
-                }));
+                .filter(p => p.startDate) // Require startDate for calendar display consistency
+                .map(p => {
+                    const start = new Date(p.startDate);
+                    let end = p.endDate ? new Date(p.endDate) : new Date(start); // Use start if end is missing
+                    if (isNaN(end.getTime()) || end < start) { end = new Date(start); } // Handle invalid or earlier end date
+                     // Make sure end date is at least the start date
+                     if (end.getTime() === start.getTime()) {
+                        // Optional: Make it span the full day if start/end are same
+                        // end.setHours(23, 59, 59, 999);
+                     } else {
+                         // For multi-day events, RBC typically includes the start day but excludes the end day
+                         // Add one day to the end date if you want it to visually span *through* the end date
+                         end.setDate(end.getDate() + 1);
+                     }
+
+                    return {
+                        id: `proj-${p.id}`, // Unique ID for calendar event
+                        title: `P: ${p.name}`, // Add prefix
+                        start: start,
+                        end: end,
+                        allDay: true, // Assume all-day for simplicity
+                        resource: { // Store original item data
+                            type: 'project',
+                            originalId: p.id,
+                            projectId: p.id // Project's own ID acts as projectId here
+                        }
+                    };
+                })
+                 .filter(event => !isNaN(event.start.getTime())); // Ensure valid start date
+
 
             // 2. Process Tasks: Map to common format (already filtered by date on backend)
             const datedTasks = (tasksResult || [])
-                .map(t => ({
-                    id: t.id,
-                    type: 'task',
-                    title: t.title,
-                    startDate: t.startDate,
-                    endDate: t.endDate, // Was dueDate in task model previously
-                    status: t.status, // Include status
-                    related: { // Add related info
-                        projectId: t.projectId, // Need projectId for linking
-                        projectName: t.project?.name,
-                        assigneeName: t.assignee?.name || t.assignee?.email
-                    }
-                }));
+                 .filter(t => t.startDate) // Require startDate for calendar display consistency
+                 .map(t => {
+                    const start = new Date(t.startDate);
+                    let end = t.endDate ? new Date(t.endDate) : new Date(start);
+                    if (isNaN(end.getTime()) || end < start) { end = new Date(start); }
+                     if (end.getTime() === start.getTime()) {
+                        // end.setHours(23, 59, 59, 999);
+                     } else {
+                         end.setDate(end.getDate() + 1);
+                     }
 
-            // 3. Combine Project and Task items
-            const combinedItems = [...datedProjects, ...datedTasks];
+                    return {
+                        id: `task-${t.id}`, // Unique ID for calendar event
+                        title: `T: ${t.title}`, // Add prefix
+                        start: start,
+                        end: end,
+                        allDay: true, // Assume all-day for simplicity
+                        resource: { // Store original item data
+                            type: 'task',
+                            originalId: t.id,
+                            projectId: t.projectId, // Include project ID for navigation
+                        }
+                    };
+                })
+                .filter(event => !isNaN(event.start.getTime())); // Ensure valid start date
 
-            // 4. Sort combined list chronologically by start date (nulls last), then end date
-            combinedItems.sort((a, b) => {
-                const dateA = a.startDate ? new Date(a.startDate) : null;
-                const dateB = b.startDate ? new Date(b.startDate) : null;
 
-                if (dateA && dateB) { // Both have start dates
-                    if (dateA.getTime() !== dateB.getTime()) return dateA - dateB;
-                    // If start dates are same, sort by end date (nulls last)
-                    const endDateA = a.endDate ? new Date(a.endDate) : null;
-                    const endDateB = b.endDate ? new Date(b.endDate) : null;
-                    if (endDateA && endDateB) return endDateA - endDateB;
-                    if (endDateA && !endDateB) return -1;
-                    if (!endDateA && endDateB) return 1;
-                    return 0;
-                }
-                if (dateA && !dateB) return -1; // A comes first
-                if (!dateA && dateB) return 1;  // B comes first
+            // 3. Combine Project and Task events
+            const combinedEvents = [...datedProjects, ...datedTasks];
 
-                // If neither has start date, sort by end date (nulls last)
-                const endDateA = a.endDate ? new Date(a.endDate) : null;
-                const endDateB = b.endDate ? new Date(b.endDate) : null;
-                if (endDateA && endDateB) return endDateA - endDateB;
-                if (endDateA && !endDateB) return -1;
-                if (!endDateA && endDateB) return 1;
-                return 0; // Keep original order if no dates differ
-            });
+            // 4. Sort combined list (optional - calendar might sort itself, but good practice)
+             combinedEvents.sort((a, b) => a.start - b.start);
 
-            setScheduledItems(combinedItems);
+            setCalendarEvents(combinedEvents);
 
         } catch (err) {
-            const message = err.message || 'Failed to load schedule data.';
-            setError(`Error loading schedule: ${message}`);
-            console.error("Fetch Schedule Data Error:", err);
-            setScheduledItems([]); // Clear data on error
+             // Full error handling
+             const message = err.message || 'Failed to load schedule data.';
+             setError(`Error loading schedule: ${message}`);
+             console.error("Fetch Schedule Data Error:", err);
+             setCalendarEvents([]); // Clear data on error
         } finally {
             setIsLoading(false);
         }
@@ -111,68 +141,42 @@ function SchedulePage() {
     }, [fetchScheduleData]); // Depend on the stable callback
 
 
+    // Handler for clicking on an event in the calendar
+    const handleSelectEvent = useCallback((event) => {
+        // Navigate to the project detail page using the stored projectId
+        if (event.resource?.projectId) {
+            navigate(`/projects/${event.resource.projectId}`);
+        } else {
+            console.warn("Could not navigate, missing project ID in event resource", event);
+            // Optionally navigate to a default page or show an error
+        }
+    }, [navigate]); // Include navigate in dependency array
+
+
+    // --- Render Logic ---
     return (
         <div>
-            <h2>Schedule / Dated Items</h2>
+            <h2>Schedule Calendar</h2>
 
+            {/* Display loading or error state */}
             {isLoading && <LoadingSpinner />}
             {error && <div style={errorBoxStyle}>{error}</div>}
 
+            {/* Display Calendar only when not loading and no error */}
             {!isLoading && !error && (
-                <div>
-                    {scheduledItems.length === 0 ? (
-                        <p>No projects or tasks with start or end dates found.</p>
-                    ) : (
-                        <ul style={scheduleListStyle}>
-                           {scheduledItems.map(item => (
-                               <li key={`${item.type}-${item.id}`} style={scheduleItemStyle}> {/* Unique key */}
-                                   <div style={itemHeaderStyle}>
-                                        {/* Item Title (Link to Project Detail) */}
-                                        <span style={itemTitleStyle}>
-                                            {item.type === 'project' ? (
-                                                <Link to={`/projects/${item.id}`} style={itemLinkStyle}>
-                                                    {item.title}
-                                                </Link>
-                                            ) : (
-                                                // Task links back to its project detail page for now
-                                                <Link to={`/projects/${item.related.projectId}`} style={itemLinkStyle}>
-                                                    {item.title}
-                                                </Link>
-                                            )}
-                                        </span>
-                                        {/* Item Type Badge */}
-                                        <span style={itemTypeStyle}>
-                                            {item.type === 'project' ? 'Project' : 'Task'}
-                                        </span>
-                                   </div>
-
-                                   {/* Item Details (Client/Project/Assignee/Status) */}
-                                   <div style={itemMetaStyle}>
-                                        {item.type === 'project' && (
-                                            <span>Client: {item.related.clientName || 'N/A'}</span>
-                                        )}
-                                        {item.type === 'task' && (
-                                            <span>Project: {item.related.projectName || 'N/A'}</span>
-                                        )}
-                                        <span style={{ marginLeft: 'var(--spacing-md)' }}>Status: {item.status}</span>
-                                        {item.type === 'task' && item.related.assigneeName && (
-                                            <span style={{ marginLeft: 'var(--spacing-md)' }}>Assignee: {item.related.assigneeName}</span>
-                                        )}
-                                   </div>
-
-                                   {/* Dates */}
-                                   <div style={{marginTop: 'var(--spacing-sm)'}}>
-                                       <span style={dateStyle}>
-                                           Start: {item.startDate ? new Date(item.startDate).toLocaleDateString() : 'Not Set'}
-                                       </span>
-                                       <span style={dateStyle}>
-                                           End: {item.endDate ? new Date(item.endDate).toLocaleDateString() : 'Not Set'}
-                                       </span>
-                                   </div>
-                               </li>
-                           ))}
-                       </ul>
-                    )}
+                <div style={calendarContainerStyle}> {/* Container controls the calendar height */}
+                    <Calendar
+                        localizer={localizer}
+                        events={calendarEvents}
+                        startAccessor="start" // Prop name in event object for start date
+                        endAccessor="end"     // Prop name in event object for end date
+                        style={{ height: '100%' }} // Make calendar fill the container height
+                        views={['month', 'week', 'day', 'agenda']} // Enable different view options
+                        onSelectEvent={handleSelectEvent} // Handle clicks on events
+                        tooltipAccessor={(event) => event.title} // Show title on hover (basic tooltip)
+                        // Consider adding eventPropGetter for custom styling based on type/status
+                        // eventPropGetter={eventStyleGetter}
+                    />
                 </div>
             )}
         </div>
@@ -180,3 +184,19 @@ function SchedulePage() {
 }
 
 export default SchedulePage;
+
+/* Example for custom styling (optional, place outside component)
+const eventStyleGetter = (event, start, end, isSelected) => {
+    let style = {
+        backgroundColor: event.resource?.type === 'project' ? '#3174ad' : '#5cb85c', // Blue for projects, Green for tasks
+        borderRadius: '5px',
+        opacity: 0.8,
+        color: 'white',
+        border: '0px',
+        display: 'block'
+    };
+    return {
+        style: style
+    };
+};
+*/

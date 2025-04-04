@@ -6,6 +6,7 @@ import { AuthProvider } from './contexts/AuthContext'; // Import AuthProvider
 import App from './App.jsx';
 
 // Import styles
+import './index.css';
 import './styles/variables.css';
 import './styles/theme.css';
 import './styles/base.css';
