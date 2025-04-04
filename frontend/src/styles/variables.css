@@ -1,0 +1,38 @@
+/* frontend/src/styles/variables.css */
+/* Define the CSS custom properties (variables) that themes will set */
+:root {
+    /* Colors */
+    --color-background-primary: /* defined by theme */;
+    --color-background-secondary: /* defined by theme */;
+    --color-text-primary: /* defined by theme */;
+    --color-text-secondary: /* defined by theme */;
+    --color-accent-primary: /* defined by theme */;
+    --color-accent-secondary: /* defined by theme */;
+    --color-border: /* defined by theme */;
+    --color-error: #dc3545;
+    --color-success: #198754;
+  
+    /* Typography */
+    --font-family-base: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    --font-size-base: 16px;
+    --font-size-sm: 0.875rem;
+    --font-size-lg: 1.25rem;
+    --line-height-base: 1.5;
+  
+    /* Spacing */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+  
+    /* Borders */
+    --border-radius: 0.375rem;
+  
+    /* Transitions */
+    --transition-fast: 150ms ease-in-out;
+  
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }

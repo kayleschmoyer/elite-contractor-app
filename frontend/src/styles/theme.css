@@ -1,0 +1,24 @@
+/* frontend/src/styles/theme.css */
+
+/* Default Light Theme */
+:root {
+    --color-background-primary: #ffffff;
+    --color-background-secondary: #f8f9fa;
+    --color-text-primary: #212529;
+    --color-text-secondary: #6c757d;
+    --color-accent-primary: #0d6efd; /* Blue */
+    --color-accent-secondary: #6c757d; /* Gray */
+    --color-border: #dee2e6;
+  }
+  
+  /* Dark Theme (activated by adding class="dark" to <html> or <body>) */
+  /* We'll add the JS toggle later */
+  .dark {
+    --color-background-primary: #212529;
+    --color-background-secondary: #343a40;
+    --color-text-primary: #f8f9fa;
+    --color-text-secondary: #adb5bd;
+    --color-accent-primary: #0d6efd; /* Keep blue or adjust */
+    --color-accent-secondary: #6c757d;
+    --color-border: #495057;
+  }
