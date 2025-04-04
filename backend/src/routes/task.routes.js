@@ -14,7 +14,7 @@ router.use(authMiddleware);
 router.post('/', TaskController.createTaskController);
 
 // GET /api/tasks - Get tasks for a specific project (requires ?projectId=...)
-router.get('/', TaskController.getProjectTasksController);
+router.get('/', TaskController.getTasksController);
 
 // --- NEW: Update and Delete Routes ---
 

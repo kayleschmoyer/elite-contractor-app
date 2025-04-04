@@ -4,27 +4,73 @@ import logger from '../utils/logger.js';
 
 /**
  * Controller to handle creation of a new task.
+ * (Code provided by user - unchanged)
  */
 const createTaskController = async (req, res, next) => {
-    // ... (createTaskController function remains the same) ...
-    try { const taskData = req.body; const companyId = req.user?.companyId; if (!companyId) return res.status(401).json({ message: 'Auth error: Company missing.' }); if (!taskData.title || !taskData.projectId) return res.status(400).json({ message: 'Missing fields: title and projectId.' }); const newTask = await TaskService.createTask(taskData, companyId); res.status(201).json(newTask); }
-    catch (error) { if (error.message.includes('required fields')) return res.status(400).json({ message: error.message }); if (error.message.includes('Project not found')) return res.status(404).json({ message: error.message }); if (error.message.includes('Assignee user not found')) return res.status(400).json({ message: error.message }); next(error); }
+    try {
+        const taskData = req.body;
+        const companyId = req.user?.companyId;
+        if (!companyId) return res.status(401).json({ message: 'Authentication error: Company information missing.' });
+        if (!taskData.title || !taskData.projectId) return res.status(400).json({ message: 'Missing required fields: title and projectId.' });
+
+        const newTask = await TaskService.createTask(taskData, companyId);
+        res.status(201).json(newTask);
+    } catch (error) {
+        if (error.message.includes('required fields')) return res.status(400).json({ message: error.message });
+        if (error.message.includes('Project not found')) return res.status(404).json({ message: error.message });
+        if (error.message.includes('Assignee user not found')) return res.status(400).json({ message: error.message });
+        // Handle date validation errors potentially thrown by service
+        if (error.message.includes('Invalid Start Date') || error.message.includes('Invalid End Date')) {
+             return res.status(400).json({ message: error.message });
+        }
+        next(error);
+    }
 };
 
 /**
- * Controller to get all tasks for a specific project.
+ * --- MODIFIED: Controller to get tasks ---
+ * If req.query.projectId is provided, gets tasks for that project.
+ * Otherwise, gets all dated tasks for the user's company (for schedule).
  */
-const getProjectTasksController = async (req, res, next) => {
-    // ... (getProjectTasksController function remains the same) ...
-    try { const { projectId } = req.query; const companyId = req.user?.companyId; if (!companyId) return res.status(401).json({ message: 'Auth error: Company missing.' }); if (!projectId) return res.status(400).json({ message: 'Missing query parameter: projectId.' }); const tasks = await TaskService.getTasksByProjectId(projectId, companyId); res.status(200).json(tasks); }
-    catch (error) { if (error.message.includes('Project not found')) return res.status(404).json({ message: error.message }); next(error); }
+const getTasksController = async (req, res, next) => { // Renamed function
+    try {
+        const { projectId } = req.query; // Get projectId from query parameter
+        const companyId = req.user?.companyId;
+
+        if (!companyId) {
+            return res.status(401).json({ message: 'Authentication error: Company information missing.' });
+        }
+
+        let tasks;
+        if (projectId) {
+            // If projectId IS provided, get tasks for that specific project
+            logger.info(`Workspaceing tasks for project ${projectId}, company ${companyId}`);
+            // Validate projectId format maybe? Or let service handle not found.
+            tasks = await TaskService.getTasksByProjectId(projectId, companyId);
+        } else {
+            // If no projectId, get all dated tasks for the company schedule view
+            logger.info(`Workspaceing dated schedule tasks for company ${companyId}`);
+            tasks = await TaskService.getCompanyTasksWithDates(companyId);
+        }
+
+        res.status(200).json(tasks);
+
+    } catch (error) {
+         // Handle specific errors from service
+        if (error.message.includes('Project not found')) return res.status(404).json({ message: error.message });
+        // Pass other errors (like generic DB errors) to global handler
+        next(error);
+    }
 };
 
 
-// --- NEW: Controller to handle updating a task ---
+/**
+ * Controller to handle updating a task by Admin.
+ * (Code provided by user - unchanged)
+ */
 const updateTaskController = async (req, res, next) => {
     try {
-        const { id: taskId } = req.params; // Task ID from URL
+        const { id: taskId } = req.params;
         const updateData = req.body;
         const companyId = req.user?.companyId;
 
@@ -34,25 +80,26 @@ const updateTaskController = async (req, res, next) => {
         const updatedTask = await TaskService.updateTask(taskId, updateData, companyId);
 
         if (!updatedTask) {
-            // Service returns null if not found or doesn't belong to company
             return res.status(404).json({ message: 'Task not found or access denied.' });
         }
 
-        res.status(200).json(updatedTask); // Return updated task
+        res.status(200).json(updatedTask);
 
     } catch (error) {
-         // Handle specific validation errors from service etc.
-         if (error.message.includes('Assignee user not found') || error.message.includes('Invalid priority')) {
+         if (error.message.includes('Assignee user not found') || error.message.includes('Invalid priority') || error.message.includes('Invalid Start Date') || error.message.includes('Invalid End Date')) {
              return res.status(400).json({ message: error.message });
          }
         next(error);
     }
 };
 
-// --- NEW: Controller to handle deleting a task ---
+/**
+ * Controller to handle deleting a task by Admin.
+ * (Code provided by user - unchanged)
+ */
 const deleteTaskController = async (req, res, next) => {
-    try {
-        const { id: taskId } = req.params; // Task ID from URL
+     try {
+        const { id: taskId } = req.params;
         const companyId = req.user?.companyId;
 
         if (!companyId) return res.status(401).json({ message: 'Authentication error: Company information missing.' });
@@ -60,15 +107,13 @@ const deleteTaskController = async (req, res, next) => {
         const success = await TaskService.deleteTask(taskId, companyId);
 
         if (!success) {
-            // Service returns false if not found or doesn't belong to company
             return res.status(404).json({ message: 'Task not found or access denied.' });
         }
 
-        res.status(204).send(); // Success, no content
+        res.status(204).send();
 
     } catch (error) {
-         // Handle specific errors like FK constraint from service
-         if (error.message.includes('Cannot delete')) {
+         if (error.message.includes('Cannot delete')) { // Catch specific delete constraint error from service if added
              return res.status(400).json({ message: error.message });
          }
         next(error);
@@ -76,12 +121,12 @@ const deleteTaskController = async (req, res, next) => {
 };
 
 
-// Export all controller functions
+// Export all controller functions, using the new name for the GET handler
 const TaskController = {
     createTaskController,
-    getProjectTasksController,
-    updateTaskController,   // <-- Add new
-    deleteTaskController,   // <-- Add new
+    getTasksController, // <-- Use renamed function
+    updateTaskController,
+    deleteTaskController,
 };
 
 export default TaskController;

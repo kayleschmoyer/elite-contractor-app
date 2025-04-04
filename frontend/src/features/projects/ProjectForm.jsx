@@ -1,61 +1,53 @@
-// frontend/src/features/projects/ProjectForm.jsx
+// frontend/src/features/projects/ProjectForm.jsx (or components/forms/...)
 import React, { useState, useEffect } from 'react';
 
-// --- Basic Styles (Consider moving to CSS) ---
-const formStyle = {
-    padding: 'var(--spacing-lg)',
-    border: '1px solid var(--color-border)',
-    borderRadius: 'var(--border-radius)',
-    marginBottom: 'var(--spacing-lg)',
-    backgroundColor: 'var(--color-background-secondary)',
-    maxWidth: '500px', // Limit form width
-};
+// --- Basic Styles ---
+const formStyle = { padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)', borderRadius: 'var(--border-radius)', marginBottom: 'var(--spacing-lg)', backgroundColor: 'var(--color-background-secondary)', maxWidth: '500px' };
 const inputGroupStyle = { marginBottom: 'var(--spacing-md)' };
 const labelStyle = { display: 'block', marginBottom: 'var(--spacing-xs)', fontWeight: 'bold' };
-const inputStyle = {
-    width: '100%',
-    padding: 'var(--spacing-sm)',
-    border: '1px solid var(--color-border)',
-    borderRadius: 'var(--border-radius)',
-    fontSize: 'inherit',
-};
-const selectStyle = { ...inputStyle }; // Style for select dropdown
+const inputStyle = { width: '100%', padding: 'var(--spacing-sm)', border: '1px solid var(--color-border)', borderRadius: 'var(--border-radius)', fontSize: 'inherit' };
+const selectStyle = { ...inputStyle };
 const buttonGroupStyle = { display: 'flex', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-lg)' };
-const buttonStyle = {
-    padding: 'var(--spacing-sm) var(--spacing-md)',
-    border: 'none',
-    borderRadius: 'var(--border-radius)',
-    cursor: 'pointer',
-    fontSize: 'inherit',
-};
+const buttonStyle = { padding: 'var(--spacing-sm) var(--spacing-md)', border: 'none', borderRadius: 'var(--border-radius)', cursor: 'pointer', fontSize: 'inherit' };
 const submitButtonStyle = { ...buttonStyle, backgroundColor: 'var(--color-accent-primary)', color: 'white' };
 const cancelButtonStyle = { ...buttonStyle, backgroundColor: 'var(--color-background-secondary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' };
 const errorTextStyle = { color: 'var(--color-error)', fontSize: 'var(--font-size-sm)', marginTop: 'var(--spacing-xs)' };
 // --- End Styles ---
 
-
 /**
- * A form for creating or editing projects, now including client selection.
+ * Form for creating/editing projects, includes client select and dates.
  * @param {object} props
- * @param {function} props.onSubmit - Called with form data on valid submission.
- * @param {function} props.onCancel - Called when cancel button is clicked.
- * @param {boolean} [props.isSubmitting=false] - Disables form during submission.
- * @param {object} [props.initialData={}] - Data for pre-filling the form (editing).
- * @param {Array<object>} [props.clients=[]] - List of available clients for dropdown.
+ * @param {function} props.onSubmit
+ * @param {function} props.onCancel
+ * @param {boolean} [props.isSubmitting=false]
+ * @param {object} [props.initialData={}] - Includes potential date strings like "YYYY-MM-DDTHH:mm:ss.sssZ"
+ * @param {Array<object>} [props.clients=[]]
  */
 function ProjectForm({
     onSubmit,
     onCancel,
     isSubmitting = false,
     initialData = {},
-    clients = [] // <-- Accept clients prop
+    clients = []
 }) {
+    // Function to format ISO date string to YYYY-MM-DD for input[type=date]
+    const formatDateForInput = (dateString) => {
+        if (!dateString) return '';
+        try {
+            return dateString.split('T')[0]; // Takes the date part from "YYYY-MM-DDTHH:mm:ss.sssZ"
+        } catch (e) {
+            return ''; // Handle potential errors
+        }
+    };
+
     const [formData, setFormData] = useState({
         name: initialData.name || '',
         status: initialData.status || 'Planning',
         address: initialData.address || '',
         notes: initialData.notes || '',
-        clientId: initialData.clientId || '', // <-- Initialize clientId state
+        clientId: initialData.clientId || '',
+        startDate: formatDateForInput(initialData.startDate), // <-- Format initial date
+        endDate: formatDateForInput(initialData.endDate),     // <-- Format initial date
     });
     const [errors, setErrors] = useState({});
 
@@ -66,10 +58,14 @@ function ProjectForm({
             status: initialData.status || 'Planning',
             address: initialData.address || '',
             notes: initialData.notes || '',
-            clientId: initialData.clientId || '', // Handle null/undefined from initialData
+            clientId: initialData.clientId || '',
+            startDate: formatDateForInput(initialData.startDate), // <-- Format here too
+            endDate: formatDateForInput(initialData.endDate),     // <-- Format here too
         });
         setErrors({});
-    }, [initialData]);
+        // Add relevant fields from initialData to dependency array
+    }, [initialData]); // Simple dependency on object ref; consider specific fields if issues arise
+
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -86,7 +82,7 @@ function ProjectForm({
         const newErrors = {};
         if (!formData.name.trim()) newErrors.name = "Project name is required.";
         if (!formData.status) newErrors.status = "Status is required.";
-        // No validation needed for optional clientId select
+        // Optional: Add validation for date logic (e.g., end date after start date)
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -94,10 +90,15 @@ function ProjectForm({
     const handleSubmit = (e) => {
         e.preventDefault();
         if (validateForm()) {
-            // Prepare data to submit, ensuring clientId is null if empty string
+            // Prepare data, ensuring empty dates become null
             const dataToSubmit = {
-                ...formData,
-                clientId: formData.clientId || null, // Convert "" back to null for API/DB
+                name: formData.name.trim(),
+                status: formData.status,
+                address: formData.address.trim() || null,
+                notes: formData.notes.trim() || null,
+                clientId: formData.clientId || null,
+                startDate: formData.startDate || null, // Send null if empty string
+                endDate: formData.endDate || null,     // Send null if empty string
             };
             onSubmit(dataToSubmit);
         }
@@ -110,48 +111,24 @@ function ProjectForm({
             {/* Name Input */}
             <div style={inputGroupStyle}>
                 <label htmlFor="name" style={labelStyle}>Project Name:</label>
-                <input
-                    type="text" id="name" name="name" value={formData.name}
-                    onChange={handleChange} style={inputStyle} disabled={isSubmitting} required
-                    aria-invalid={!!errors.name} aria-describedby={errors.name ? "name-error" : undefined}
-                />
+                <input type="text" id="name" name="name" value={formData.name} onChange={handleChange} style={inputStyle} disabled={isSubmitting} required aria-invalid={!!errors.name} aria-describedby={errors.name ? "name-error" : undefined} />
                 {errors.name && <p id="name-error" style={errorTextStyle}>{errors.name}</p>}
             </div>
 
-            {/* --- Client Selection Dropdown (NEW) --- */}
+            {/* Client Selection */}
             <div style={inputGroupStyle}>
                 <label htmlFor="clientId" style={labelStyle}>Client (Optional):</label>
-                <select
-                    id="clientId"
-                    name="clientId"
-                    value={formData.clientId} // Bind value to state
-                    onChange={handleChange}
-                    style={selectStyle}
-                    disabled={isSubmitting || clients.length === 0} // Disable if no clients fetched
-                >
+                <select id="clientId" name="clientId" value={formData.clientId} onChange={handleChange} style={selectStyle} disabled={isSubmitting || clients.length === 0} >
                     <option value="">-- Select a Client --</option>
-                    {/* Map over the clients prop passed down from ProjectList */}
-                    {clients.map(client => (
-                        <option key={client.id} value={client.id}>
-                            {client.name}
-                        </option>
-                    ))}
+                    {clients.map(client => (<option key={client.id} value={client.id}>{client.name}</option>))}
                 </select>
-                {/* Show message if no clients are available */}
-                {clients.length === 0 && !isSubmitting && <p style={{...errorTextStyle, color: 'var(--color-text-secondary)'}}>(No clients available. Add clients on the Clients page first.)</p>}
-                 {/* Add specific error display for clientId if needed */}
+                {clients.length === 0 && !isSubmitting && <p style={{...errorTextStyle, color: 'var(--color-text-secondary)'}}>(No clients available)</p>}
             </div>
-            {/* --- End Client Selection --- */}
-
 
             {/* Status Selection */}
             <div style={inputGroupStyle}>
                 <label htmlFor="status" style={labelStyle}>Status:</label>
-                <select
-                     id="status" name="status" value={formData.status}
-                     onChange={handleChange} style={selectStyle} disabled={isSubmitting} required
-                >
-                     {/* Default option (useful if status wasn't pre-filled) */}
+                <select id="status" name="status" value={formData.status} onChange={handleChange} style={selectStyle} disabled={isSubmitting} required>
                      {!formData.status && <option value="" disabled>-- Select Status --</option>}
                      <option value="Planning">Planning</option>
                      <option value="Lead">Lead</option>
@@ -163,32 +140,51 @@ function ProjectForm({
                  {errors.status && <p style={errorTextStyle}>{errors.status}</p>}
             </div>
 
+            {/* --- NEW: Start Date Input --- */}
+            <div style={inputGroupStyle}>
+                <label htmlFor="startDate" style={labelStyle}>Start Date (Optional):</label>
+                <input
+                    type="date"
+                    id="startDate"
+                    name="startDate"
+                    value={formData.startDate}
+                    onChange={handleChange}
+                    style={inputStyle}
+                    disabled={isSubmitting}
+                />
+            </div>
+
+            {/* --- NEW: End Date Input --- */}
+            <div style={inputGroupStyle}>
+                <label htmlFor="endDate" style={labelStyle}>End Date (Optional):</label>
+                <input
+                    type="date"
+                    id="endDate"
+                    name="endDate"
+                    value={formData.endDate}
+                    onChange={handleChange}
+                    style={inputStyle}
+                    disabled={isSubmitting}
+                />
+            </div>
+            {/* --- End Date Inputs --- */}
+
              {/* Address Input */}
             <div style={inputGroupStyle}>
                 <label htmlFor="address" style={labelStyle}>Address:</label>
-                <input
-                    type="text" id="address" name="address" value={formData.address}
-                    onChange={handleChange} style={inputStyle} disabled={isSubmitting}
-                />
+                <input type="text" id="address" name="address" value={formData.address} onChange={handleChange} style={inputStyle} disabled={isSubmitting}/>
             </div>
 
             {/* Notes Input */}
             <div style={inputGroupStyle}>
                 <label htmlFor="notes" style={labelStyle}>Notes:</label>
-                <textarea
-                    id="notes" name="notes" value={formData.notes}
-                    onChange={handleChange} rows="3" style={inputStyle} disabled={isSubmitting}
-                ></textarea>
+                <textarea id="notes" name="notes" value={formData.notes} onChange={handleChange} rows="3" style={inputStyle} disabled={isSubmitting}></textarea>
             </div>
 
             {/* Action Buttons */}
             <div style={buttonGroupStyle}>
-                 <button type="submit" style={submitButtonStyle} disabled={isSubmitting}>
-                    {isSubmitting ? 'Saving...' : (initialData.id ? 'Save Changes' : 'Create Project')}
-                </button>
-                <button type="button" onClick={onCancel} style={cancelButtonStyle} disabled={isSubmitting}>
-                    Cancel
-                </button>
+                 <button type="submit" style={submitButtonStyle} disabled={isSubmitting}>{isSubmitting ? 'Saving...' : (initialData.id ? 'Save Changes' : 'Create Project')}</button>
+                <button type="button" onClick={onCancel} style={cancelButtonStyle} disabled={isSubmitting}>Cancel</button>
             </div>
         </form>
     );

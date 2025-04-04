@@ -9,7 +9,8 @@ import ProjectList from './features/projects/ProjectList';
 import LoginPage from './pages/LoginPage';
 import UserManagementPage from './pages/admin/UserManagementPage';
 import ClientListPage from './pages/ClientListPage';
-import ProjectDetailPage from './pages/ProjectDetailPage'; // <-- Import Project Detail Page
+import ProjectDetailPage from './pages/ProjectDetailPage';
+import SchedulePage from './pages/SchedulePage'; // <-- Import Schedule Page
 
 // --- Import Helper Components ---
 import LoadingSpinner from './components/common/LoadingSpinner'; // Adjust path if needed
@@ -69,13 +70,19 @@ function App() {
       {/* --- Navigation Bar --- */}
       <nav style={navStyle}>
          <div style={navGroupStyle}> {/* Left group */}
-            {/* Link to home/projects always visible */}
-            <Link to="/" style={navLinkStyle}>Projects</Link> {/* Updated label */}
+            <Link to="/" style={navLinkStyle}>Projects</Link>
 
-            {/* --- Clients Link (visible if logged in) --- */}
+            {/* Clients Link */}
             {isAuthenticated && (
                 <Link to="/clients" style={navLinkStyle}>Clients</Link>
             )}
+
+            {/* --- Add Schedule Link (visible if logged in) --- */}
+            {isAuthenticated && (
+                <Link to="/schedule" style={navLinkStyle}>Schedule</Link>
+            )}
+            {/* --- End Schedule Link --- */}
+
 
             {/* Conditional Admin Link */}
             {isAuthenticated && user?.role === 'ADMIN' && (
@@ -91,7 +98,6 @@ function App() {
                 : <button onClick={logout} style={logoutButtonStyle}>Logout ({user?.email})</button> // Show email if logged in
             }
             {/* TODO: Add Register Link if needed */}
-            {/* {!isAuthenticated && <Link to="/register" style={navLinkStyle}>Register</Link>} */}
          </div>
       </nav>
 
@@ -101,10 +107,8 @@ function App() {
         <Route
             path="/login"
             element={!isAuthenticated ? <LoginPage /> : <Navigate to="/" replace />}
-            // If user is already authenticated, redirect from /login to home
         />
         {/* Add Registration Route here if needed later */}
-        {/* <Route path="/register" element={!isAuthenticated ? <RegistrationPage /> : <Navigate to="/" replace />} /> */}
 
 
         {/* Protected Routes (Require User to be Logged In) */}
@@ -113,21 +117,15 @@ function App() {
             {/* Standard Authenticated Routes */}
             <Route path="/" element={<ProjectList />} />
             <Route path="/projects" element={<ProjectList />} />
-            <Route path="/clients" element={<ClientListPage />} />
-
-            {/* --- Add Project Detail Route --- */}
-            {/* The ':id' part makes 'id' available as a URL parameter */}
             <Route path="/projects/:id" element={<ProjectDetailPage />} />
-            {/* --- End Project Detail Route --- */}
+            <Route path="/clients" element={<ClientListPage />} />
+            <Route path="/schedule" element={<SchedulePage />} /> {/* <-- Add Schedule Route */}
 
 
             {/* Admin-Only Protected Routes */}
             <Route path="/admin" element={<RequireAdminRole />}> {/* Level 2 Protection: Must have ADMIN role */}
-                 {/* Define specific admin pages relative to "/admin" */}
-                 {/* Outlet in RequireAdminRole renders these based on matched path */}
                  <Route path="users" element={<UserManagementPage />} />
-                 {/* Add other admin-only pages here */}
-                 {/* <Route path="settings" element={<AdminSettingsPage />} /> */}
+                 {/* Add other admin routes later */}
             </Route>
 
         </Route>
@@ -135,7 +133,6 @@ function App() {
 
 
         {/* Catch-all 404 Not Found Route */}
-        {/* This should be the last route defined */}
         <Route path="*" element={
             <div>
                 <h2>404 Not Found</h2>

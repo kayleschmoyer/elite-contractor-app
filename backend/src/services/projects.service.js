@@ -4,26 +4,20 @@ import logger from '../utils/logger.js';
 
 // Helper to select client fields to return consistently
 const clientSelection = {
-    select: {
-        id: true,
-        name: true,
-    }
+    select: { id: true, name: true }
 };
 
 /**
- * Gets all projects belonging to a specific user, including linked client name.
- * @param {string} userId - The ID of the user whose projects to retrieve.
- * @returns {Promise<Array<object>>}
+ * Gets all projects belonging to a specific user, including linked client name and dates.
  */
 const getAllProjects = async (userId) => {
     if (!userId) throw new Error('User ID is required to fetch projects.');
     try {
         const projects = await prisma.project.findMany({
             where: { authorId: userId },
-            include: { // Include related Client data
-                client: clientSelection
-            },
+            include: { client: clientSelection },
             orderBy: { createdAt: 'desc' }
+            // startDate and endDate are included by default
         });
         return projects;
     } catch (error) {
@@ -33,17 +27,14 @@ const getAllProjects = async (userId) => {
 };
 
 /**
- * Gets a single project by its ID, including linked client name.
- * @param {string} id - Project ID.
- * @returns {Promise<object|null>}
+ * Gets a single project by its ID, including linked client name and dates.
  */
 const getProjectById = async (id) => {
      try {
         const project = await prisma.project.findUnique({
             where: { id: id },
-            include: { // Include related Client data
-                client: clientSelection
-            }
+            include: { client: clientSelection }
+            // startDate and endDate are included by default
         });
         return project;
     } catch (error) {
@@ -53,48 +44,47 @@ const getProjectById = async (id) => {
 };
 
 /**
- * Creates a new project linked to a user and potentially a client.
- * Assigns the project to the user's company.
- * @param {object} projectData - Data from req body { name, status, clientId?, address?, notes? }
- * @param {string} userId - The ID of the user creating the project.
- * @returns {Promise<object>} The newly created project object including client info.
+ * Creates a new project linked to a user and potentially a client, including dates.
  */
 const createProject = async (projectData, userId) => {
     if (!userId) throw new Error('User ID is required to create a project.');
     try {
-        // Basic validation
         if (!projectData.name || !projectData.status) {
             throw new Error('Missing required project fields: name, status');
         }
 
-        // Handle optional clientId: convert empty string from form to null for DB
         const clientId = projectData.clientId || null;
 
-        // --- FETCH USER TO GET companyId --- (This was missing/incorrect before)
+        // Fetch user to get their companyId
         const user = await prisma.user.findUnique({
             where: { id: userId },
-            select: { companyId: true } // Only select companyId
+            select: { companyId: true }
         });
         if (!user || !user.companyId) {
-            // If user somehow has no companyId associated
             throw new Error('Could not determine user company to create project.');
         }
-        // --- END FETCH USER ---
 
-        // Create the project using the fetched companyId
+        // --- Prepare data, handling dates ---
+        const dataToCreate = {
+            name: projectData.name,
+            status: projectData.status,
+            address: projectData.address,
+            notes: projectData.notes,
+            authorId: userId,
+            companyId: user.companyId,
+            clientId: clientId,
+            // Convert date strings to Date objects or null
+            startDate: projectData.startDate ? new Date(projectData.startDate) : null,
+            endDate: projectData.endDate ? new Date(projectData.endDate) : null,
+        };
+        // Basic validation: Ensure dates are valid if provided
+        if (projectData.startDate && isNaN(dataToCreate.startDate.getTime())) throw new Error("Invalid Start Date provided.");
+        if (projectData.endDate && isNaN(dataToCreate.endDate.getTime())) throw new Error("Invalid End Date provided.");
+        // --- End Prepare data ---
+
         const newProject = await prisma.project.create({
-            data: {
-                name: projectData.name,
-                status: projectData.status,
-                address: projectData.address,
-                notes: projectData.notes,
-                authorId: userId,         // Link to the author
-                companyId: user.companyId, // <-- Use the companyId from the user record
-                clientId: clientId,       // Link to the client (can be null)
-            },
-            include: { // Include client data in the response
-                client: clientSelection
-            }
+            data: dataToCreate,
+            include: { client: clientSelection }
         });
 
         logger.info(`Project created: ${newProject.name} for user ${userId} in company ${user.companyId}`);
@@ -102,39 +92,62 @@ const createProject = async (projectData, userId) => {
 
     } catch (error) {
         logger.error(`Error creating project for user ${userId}:`, error);
-        // Handle potential foreign key error if invalid clientId provided
-        if (error.code === 'P2003' && error.meta?.field_name?.includes('clientId')) {
-             throw new Error('Invalid Client ID provided.'); // Controller -> 400
+        if (error instanceof Error && (error.message.includes('required fields') || error.message.includes('Invalid Client ID') || error.message.includes('Invalid Start Date') || error.message.includes('Invalid End Date'))) {
+            throw error; // Propagate specific validation errors
         }
-        // Throw the generic error for the controller's final catch block
         throw new Error('Could not save project to database.');
     }
 };
 
 /**
- * Updates an existing project by its ID. Ownership checked in controller.
- * @param {string} id - The ID of the project to update.
- * @param {object} updateData - An object containing the fields to update, potentially including clientId.
- * @returns {Promise<object|null>} The updated project object including client info, or null if not found.
+ * Updates an existing project by its ID. Ownership checked in controller. Handles dates.
  */
  const updateProject = async (id, updateData) => {
     try {
-        // Prepare data, handle clientId explicitly to allow setting it to null
-        const dataToUpdate = { ...updateData };
+        // Prepare data, handle optional fields and dates explicitly
+        const dataToUpdate = {};
+
+        // Add fields only if they exist in updateData to allow partial updates
+        if (updateData.hasOwnProperty('name')) dataToUpdate.name = updateData.name;
+        if (updateData.hasOwnProperty('status')) dataToUpdate.status = updateData.status;
+        if (updateData.hasOwnProperty('address')) dataToUpdate.address = updateData.address;
+        if (updateData.hasOwnProperty('notes')) dataToUpdate.notes = updateData.notes;
+
+        // Handle clientId update (allow setting to null)
         if (updateData.hasOwnProperty('clientId')) {
-            dataToUpdate.clientId = updateData.clientId || null; // Allow unsetting client
+            dataToUpdate.clientId = updateData.clientId || null;
         }
-        // Prevent critical fields from being changed via update if necessary
-        delete dataToUpdate.id;
-        delete dataToUpdate.authorId;
-        delete dataToUpdate.companyId;
+
+        // --- Handle Date Updates (allow setting to null) ---
+        if (updateData.hasOwnProperty('startDate')) {
+            dataToUpdate.startDate = updateData.startDate ? new Date(updateData.startDate) : null;
+            if (updateData.startDate && isNaN(dataToUpdate.startDate.getTime())) throw new Error("Invalid Start Date provided.");
+        }
+        if (updateData.hasOwnProperty('endDate')) {
+            dataToUpdate.endDate = updateData.endDate ? new Date(updateData.endDate) : null;
+            if (updateData.endDate && isNaN(dataToUpdate.endDate.getTime())) throw new Error("Invalid End Date provided.");
+        }
+        // --- End Date Updates ---
+
+
+        // Prevent changing key identifiers
+        // delete dataToUpdate.id; // Not needed as it's not typically in updateData
+        // delete dataToUpdate.authorId;
+        // delete dataToUpdate.companyId;
+
+        // Check if there's anything actually to update
+        if (Object.keys(dataToUpdate).length === 0) {
+             // If only ID was passed, maybe just fetch and return existing? Or return error?
+             // Let's return existing data if nothing else was changed.
+            logger.warn(`Update called for project ${id} with no changed data.`);
+            return await getProjectById(id); // Need to ensure getProjectById exists and works
+        }
+
 
         const updatedProject = await prisma.project.update({
             where: { id: id },
             data: dataToUpdate,
-            include: { // Include client data in the response
-                client: clientSelection
-            }
+            include: { client: clientSelection }
         });
         return updatedProject;
     } catch (error) {
@@ -143,7 +156,10 @@ const createProject = async (projectData, userId) => {
              return null;
          }
          if (error.code === 'P2003' && error.meta?.field_name?.includes('clientId')) {
-             throw new Error('Invalid Client ID provided for update.'); // Controller -> 400
+             throw new Error('Invalid Client ID provided for update.');
+         }
+         if (error instanceof Error && (error.message.includes('Invalid Start Date') || error.message.includes('Invalid End Date'))) {
+             throw error; // Propagate date validation errors
          }
         throw new Error('Could not update project in database.');
     }
@@ -151,26 +167,15 @@ const createProject = async (projectData, userId) => {
 
 /**
  * Deletes a project by its ID. Ownership checked in controller.
- * @param {string} id - The ID of the project to delete.
- * @returns {Promise<boolean>} True if deleted, false if not found.
  */
 const deleteProject = async (id) => {
-    try {
-        await prisma.project.delete({
-            where: { id: id },
-        });
-        return true;
-    } catch (error) {
-         logger.error(`Error deleting project ${id} from DB:`, error);
-         if (error.code === 'P2025') { // Record not found
-             return false;
-         }
-        throw new Error('Could not delete project from database.');
-    }
+    // ... (deleteProject function remains the same) ...
+    try { await prisma.project.delete({ where: { id: id } }); return true; }
+    catch (error) { logger.error(`Error deleting project ${id} from DB:`, error); if (error.code === 'P2025') return false; throw new Error('Could not delete project from database.'); }
 };
 
 
-// Export the service object
+// Export all service functions
 const ProjectService = {
     getAllProjects,
     getProjectById,

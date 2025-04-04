@@ -20,6 +20,9 @@ const editItemButtonStyle = { ...itemButtonStyle, borderColor: 'var(--color-acce
 const deleteItemButtonStyle = { ...itemButtonStyle, borderColor: 'var(--color-error)', color: 'var(--color-error)'};
 const notesContainerStyle = { marginBottom: 'var(--spacing-sm)' };
 const notesPreStyle = { whiteSpace: 'pre-wrap', margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' };
+const detailTextStyle = { fontSize: 'var(--font-size-base)', margin: 'var(--spacing-xs) 0'};
+const taskMetaStyle = { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' };
+const taskNotesStyle = { fontSize: 'var(--font-size-sm)', margin: 'var(--spacing-xs) 0 0 0', whiteSpace: 'pre-wrap' };
 // --- End Styles ---
 
 function ProjectDetailPage() {
@@ -29,71 +32,125 @@ function ProjectDetailPage() {
     const [isLoadingProject, setIsLoadingProject] = useState(true);
     const [isLoadingTasks, setIsLoadingTasks] = useState(true);
     const [error, setError] = useState(null); // General page/list error
-
-    // --- Form State ---
     const [showAddTaskForm, setShowAddTaskForm] = useState(false);
-    const [editingTask, setEditingTask] = useState(null); // <-- State for editing task object
+    const [editingTask, setEditingTask] = useState(null);
     const [isSubmittingTask, setIsSubmittingTask] = useState(false);
     const [companyUsers, setCompanyUsers] = useState([]);
-    const [formError, setFormError] = useState(null);
-    const [usersLoading, setUsersLoading] = useState(false);
+    const [formError, setFormError] = useState(null); // Specific form errors
+    const [usersLoading, setUsersLoading] = useState(false); // Loading users for form
 
     // --- Fetch Initial Project and Task Data ---
     const loadData = useCallback(async () => {
-        // ... (same as before) ...
-        if (!projectId) { setError("Project ID not found in URL."); setIsLoadingProject(false); setIsLoadingTasks(false); return; }
+        if (!projectId) {
+            setError("Project ID not found in URL.");
+            setIsLoadingProject(false); setIsLoadingTasks(false); return;
+        }
+        // Reset everything on load or projectId change
         setIsLoadingProject(true); setIsLoadingTasks(true); setError(null); setFormError(null);
-        setProject(null); setTasks([]); setCompanyUsers([]); setShowAddTaskForm(false); setEditingTask(null); // Reset all on load
-        try { const [projectData, taskData] = await Promise.all([ getProjectById(projectId), getTasksByProjectId(projectId) ]); setProject(projectData); setTasks(taskData || []); }
-        catch (err) { const message = err.message || 'Failed to load project data or tasks.'; setError(message); console.error("Error loading project detail/tasks:", err); }
-        finally { setIsLoadingProject(false); setIsLoadingTasks(false); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [projectId]);
+        setProject(null); setTasks([]); setCompanyUsers([]); setShowAddTaskForm(false); setEditingTask(null);
 
-    useEffect(() => { loadData(); }, [loadData]);
+        try {
+            // Fetch project details and tasks in parallel
+            const [projectData, taskData] = await Promise.all([
+                getProjectById(projectId),
+                getTasksByProjectId(projectId)
+            ]);
+            setProject(projectData);
+            setTasks(taskData || []); // Ensure tasks is always an array
+        } catch (err) {
+            const message = err.message || 'Failed to load project data or tasks.';
+            setError(message); // Set general page error
+            console.error("Error loading project detail/tasks:", err);
+            setProject(null); // Clear project data on error
+            setTasks([]); // Clear tasks on error
+        } finally {
+            setIsLoadingProject(false);
+            setIsLoadingTasks(false);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [projectId]); // Re-run if projectId changes
+
+    // Initial Load Effect
+    useEffect(() => {
+        loadData();
+    }, [loadData]); // Depend on the stable loadData callback
 
     // --- Fetch Users for Assignee Dropdown ---
-    const fetchUsersForForm = useCallback(async () => { /* ... same as before ... */
-        if (usersLoading) return false; setUsersLoading(true); setFormError(null);
-        try { const usersData = await getCompanyUsers(); setCompanyUsers(usersData || []); return true; }
-        catch (error) { const message = error.message || 'Could not load user list.'; setFormError(message); console.error("Fetch Users Error:", error); setCompanyUsers([]); return false; }
-        finally { setUsersLoading(false); }
-    }, [usersLoading]);
+    const fetchUsersForForm = useCallback(async () => {
+        if (usersLoading) return false; // Prevent concurrent fetches
+        setUsersLoading(true);
+        setFormError(null); // Clear previous form errors specifically
+        try {
+            console.log("Fetching users for task form...");
+            const usersData = await getCompanyUsers(); // Fetch users
+            setCompanyUsers(usersData || []); // Ensure it's an array
+            console.log("Users fetched:", usersData);
+            return true; // Indicate success
+        } catch (error) {
+            const message = error.message || 'Could not load user list for assignee dropdown.';
+            setFormError(message); // Set specific form error
+            console.error("Fetch Users Error:", error);
+            setCompanyUsers([]); // Reset on error
+            return false; // Indicate failure
+        } finally {
+            setUsersLoading(false);
+        }
+    }, [usersLoading]); // Dependency prevents race conditions
 
-    // --- Show Add Task Form ---
+    // --- Show Add Task Form Handler ---
     const handleShowAddTaskForm = async () => {
-        setError(null); setFormError(null); setEditingTask(null); // Ensure edit mode is off
-        const success = await fetchUsersForForm();
-        if (success) setShowAddTaskForm(true);
+        setError(null); setFormError(null); // Clear errors
+        setEditingTask(null); // Ensure edit mode is off
+        const success = await fetchUsersForForm(); // Fetch users first
+        if (success) {
+            setShowAddTaskForm(true); // Show form only if users loaded
+        }
+        // If fetch fails, formError state is set and will be displayed near the form
     };
 
-    // --- Add Task Submit ---
-    const handleAddTaskSubmit = async (formData) => { /* ... same as before ... */
-        setIsSubmittingTask(true); setFormError(null);
-        try { const newTask = await createTask(formData); setTasks(prev => [newTask, ...prev]); setShowAddTaskForm(false); setCompanyUsers([]); }
-        catch (err) { const message = err.message || 'Failed.'; setFormError(`Error creating task: ${message}`); console.error("Create Task Error:", err); }
-        finally { setIsSubmittingTask(false); }
+    // --- Add Task Submit Handler ---
+    const handleAddTaskSubmit = async (formData) => {
+        setIsSubmittingTask(true);
+        setFormError(null);
+        try {
+            const newTask = await createTask(formData);
+            setTasks(prevTasks => [newTask, ...prevTasks]); // Add new task to list
+            setShowAddTaskForm(false); // Hide form on success
+            setCompanyUsers([]); // Clear user list cache
+        } catch (err) {
+            const message = err.message || 'Failed to create task.';
+            setFormError(`Error creating task: ${message}. Please check details.`);
+            console.error("Create Task Error:", err);
+            // Keep form open on error
+        } finally {
+            setIsSubmittingTask(false);
+        }
     };
 
-    // --- Cancel Add Task ---
-    const handleCancelAddTask = () => { /* ... same as before ... */
-        setShowAddTaskForm(false); setFormError(null); setCompanyUsers([]);
+    // --- Cancel Add Task Handler ---
+    const handleCancelAddTask = () => {
+        setShowAddTaskForm(false);
+        setFormError(null);
+        setCompanyUsers([]); // Clear user list cache
     };
 
     // --- Edit Task Handlers ---
     const handleEditTaskClick = async (task) => {
-        setError(null); setFormError(null); setShowAddTaskForm(false); // Ensure add mode is off
-        const success = await fetchUsersForForm(); // Fetch users for assignee dropdown
+        setError(null); setFormError(null); // Clear errors
+        setShowAddTaskForm(false); // Ensure add mode is off
+        const success = await fetchUsersForForm(); // Fetch users for dropdown
         if (success) {
-            setEditingTask(task); // Set the task to edit AFTER users are fetched
+            setEditingTask(task); // Set task to edit AFTER users are fetched
         }
+        // If fetch fails, formError state is set and will be displayed
     };
 
     const handleUpdateTaskSubmit = async (formData) => {
         if (!editingTask) return;
-        setIsSubmittingTask(true); setFormError(null);
+        setIsSubmittingTask(true);
+        setFormError(null);
         try {
-            // Don't send projectId on update, backend uses taskId
+            // Exclude projectId as it shouldn't be updated
             const { projectId: ignoredProjectId, ...updateData } = formData;
             const updatedTask = await updateTask(editingTask.id, updateData);
             // Update the task list state
@@ -106,7 +163,7 @@ function ProjectDetailPage() {
             const message = err.message || 'Failed to update task.';
             setFormError(`Error updating task: ${message}. Please check details.`);
             console.error("Update Task Error:", err);
-            // Keep form open
+            // Keep form open on error
         } finally {
             setIsSubmittingTask(false);
         }
@@ -120,80 +177,99 @@ function ProjectDetailPage() {
 
     // --- Delete Task Handler ---
     const handleDeleteTaskClick = async (taskId, taskTitle) => {
-        if (!window.confirm(`Are you sure you want to delete task: "${taskTitle}"?`)) return;
-        if (showAddTaskForm || editingTask || isSubmittingTask || usersLoading) return; // Prevent overlapping actions
+        if (!window.confirm(`Are you sure you want to delete task: "${taskTitle}"?`)) {
+            return;
+        }
+        // Prevent action if another form is active/submitting/loading users
+        if (showAddTaskForm || editingTask || isSubmittingTask || usersLoading) return;
 
-        setError(null); setFormError(null);
-        // Optional: Add a specific deleting state for this task ID?
+        setError(null); setFormError(null); // Clear errors
+        // Consider adding a specific loading state for the row being deleted
         try {
             await deleteTask(taskId);
             // Remove from list state
             setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
         } catch (err) {
             const message = err.message || 'Failed to delete task.';
-            setError(`Error deleting task: ${message}`); // Show general error for delete
+            // Show delete errors in the main error area for now
+            setError(`Error deleting task: ${message}`);
             console.error("Delete Task Error:", err);
         } finally {
-            // Reset deleting state if used
+            // Reset specific deleting state if used
         }
     };
 
-    // --- Render Logic ---
-    if (isLoadingProject) return <LoadingSpinner />;
-    if (error && !project) return <div style={errorBoxStyle}>{error}</div>; // Show error only if project failed to load
-    if (!project) return <div><h2>Project Not Found</h2><p>Could not load project details.</p><Link to="/projects">Back to Projects</Link></div>;
 
-    const isFormActive = showAddTaskForm || !!editingTask; // Is either Add or Edit form shown?
+    // --- Render Logic ---
+    if (isLoadingProject) { return <LoadingSpinner />; }
+    // Show general page error if project failed loading, before checking if project exists
+    if (error && !project) { return <div style={errorBoxStyle}>{error}</div>; }
+    if (!project) { return <div><h2>Project Not Found</h2><p>Could not load project details.</p><Link to="/projects">Back to Projects</Link></div>; }
+
+    const isFormActive = showAddTaskForm || !!editingTask;
 
     return (
         <div>
-            {/* Project Details */}
+            {/* --- Project Details --- */}
             <h2>Project: {project.name}</h2>
-            {/* ... other project details ... */}
-            <p><strong>Status:</strong> {project.status}</p>
-            <p><strong>Client:</strong> {project.client?.name || 'N/A'}</p>
-            {project.address && <p><strong>Address:</strong> {project.address}</p>}
-            {project.notes && <div style={notesContainerStyle}><strong>Notes:</strong><pre style={notesPreStyle}>{project.notes}</pre></div>}
+            <p style={detailTextStyle}><strong>Status:</strong> {project.status}</p>
+            <p style={detailTextStyle}><strong>Client:</strong> {project.client?.name || 'N/A'}</p>
+            <p style={detailTextStyle}>
+                <strong>Start Date:</strong> {project.startDate ? new Date(project.startDate).toLocaleDateString() : 'Not Set'}
+            </p>
+            <p style={detailTextStyle}>
+                <strong>End Date:</strong> {project.endDate ? new Date(project.endDate).toLocaleDateString() : 'Not Set'}
+            </p>
+            {project.address && <p style={detailTextStyle}><strong>Address:</strong> {project.address}</p>}
+            {project.notes &&
+                <div style={notesContainerStyle}> {/* Use div instead of p */}
+                    <strong>Notes:</strong>
+                    <pre style={notesPreStyle}>{project.notes}</pre>
+                </div>
+            }
 
             <hr style={{ margin: 'var(--spacing-xl) 0' }} />
 
-            {/* Tasks Section */}
+            {/* --- Tasks Section --- */}
             <h3>Tasks for this Project</h3>
 
             {/* Add Task Button / Add Form / Edit Form */}
-            {!isFormActive && ( // Show button only if no form is active
+            {!isFormActive && (
                  <button onClick={handleShowAddTaskForm} style={addButtonStyle} disabled={usersLoading}>
                     {usersLoading ? 'Loading Users...' : '+ Add New Task'}
                 </button>
             )}
 
-            {showAddTaskForm && !usersLoading && ( // Render Add form
+            {/* Display form-specific errors first */}
+            {formError && <div style={errorBoxStyle}>{formError}</div>}
+
+            {/* Show loading spinner while users are loading for the form */}
+            {usersLoading && isFormActive && <LoadingSpinner />}
+
+            {/* Render Add Form (only if not loading users) */}
+            {showAddTaskForm && !usersLoading && (
                 <TaskForm
                     onSubmit={handleAddTaskSubmit}
                     onCancel={handleCancelAddTask}
                     isSubmitting={isSubmittingTask}
                     companyUsers={companyUsers}
-                    projectId={projectId} // Pass projectId
-                    key="add-task-form"
+                    projectId={projectId}
+                    key="add-task-form" // Stable key for add form
                 />
             )}
 
-            {editingTask && !usersLoading && ( // Render Edit form
+            {/* Render Edit Form (only if not loading users) */}
+            {editingTask && !usersLoading && (
                  <TaskForm
                     onSubmit={handleUpdateTaskSubmit}
                     onCancel={handleCancelEditTask}
                     isSubmitting={isSubmittingTask}
-                    initialData={editingTask} // Pass task data to edit
+                    initialData={editingTask}
                     companyUsers={companyUsers}
-                    projectId={projectId} // Pass projectId (though form might not need it for update)
-                    key={editingTask.id} // Ensure form remounts when editingTask changes
+                    projectId={projectId}
+                    key={editingTask.id} // Key changes when task changes
                 />
             )}
-
-            {/* Display form-specific errors */}
-            {formError && <div style={errorBoxStyle}>{formError}</div>}
-            {/* Display users loading state if trying to open form */}
-            {usersLoading && isFormActive && <LoadingSpinner />}
 
             {/* Task List Area */}
             {isLoadingTasks ? (
@@ -209,29 +285,22 @@ function ProjectDetailPage() {
                         editingTask?.id === task.id ? null : (
                         <li key={task.id} style={taskItemStyle}>
                             {/* Task Content */}
-                            <strong>{task.title}</strong> <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>({task.status.replace('_', ' ')})</span>
-                            {task.assignee && <span style={{ fontSize: 'var(--font-size-sm)', fontStyle: 'italic' }}> - Assigned to: {task.assignee.name || task.assignee.email}</span>}
-                            {task.dueDate && <span style={{ fontSize: 'var(--font-size-sm)' }}> - Due: {new Date(task.dueDate).toLocaleDateString()}</span>}
-                            {task.notes && <p style={{ fontSize: 'var(--font-size-sm)', margin: 'var(--spacing-xs) 0 0 0', whiteSpace: 'pre-wrap' }}>{task.notes}</p>}
-
+                            <div>
+                                <strong>{task.title}</strong>
+                                <span style={{ ...taskMetaStyle, marginLeft: 'var(--spacing-sm)' }}>({task.status.replace('_', ' ')})</span>
+                            </div>
+                            {/* Task Meta Info (Assignee, Dates) */}
+                            <div style={taskMetaStyle}>
+                                {task.assignee && <span>Assigned to: {task.assignee.name || task.assignee.email}</span>}
+                                {task.startDate && <span style={{ marginLeft: task.assignee ? 'var(--spacing-md)' : '0' }}>Start: {new Date(task.startDate).toLocaleDateString()}</span>}
+                                {task.endDate && <span style={{ marginLeft: task.startDate || task.assignee ? 'var(--spacing-md)' : '0' }}>End/Due: {new Date(task.endDate).toLocaleDateString()}</span>}
+                            </div>
+                            {/* Task Notes */}
+                            {task.notes && <p style={taskNotesStyle}>{task.notes}</p>}
                              {/* Task Action Buttons */}
                              <div style={{marginTop: 'var(--spacing-sm)'}}>
-                                <button
-                                    onClick={() => handleEditTaskClick(task)}
-                                    style={editItemButtonStyle}
-                                    disabled={isFormActive || isSubmittingTask || usersLoading} // Disable if form open
-                                    title="Edit Task"
-                                >
-                                    Edit
-                                </button>
-                                <button
-                                     onClick={() => handleDeleteTaskClick(task.id, task.title)}
-                                     style={deleteItemButtonStyle}
-                                     disabled={isFormActive || isSubmittingTask || usersLoading} // Disable if form open
-                                     title="Delete Task"
-                                >
-                                    Delete
-                                </button>
+                                <button onClick={() => handleEditTaskClick(task)} style={editItemButtonStyle} disabled={isFormActive || isSubmittingTask || usersLoading} title="Edit Task">Edit</button>
+                                <button onClick={() => handleDeleteTaskClick(task.id, task.title)} style={deleteItemButtonStyle} disabled={isFormActive || isSubmittingTask || usersLoading} title="Delete Task">Delete</button>
                              </div>
                         </li>
                         )
