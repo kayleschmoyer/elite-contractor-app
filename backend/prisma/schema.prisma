@@ -1,0 +1,25 @@
+// backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL") // Reads from backend/.env file
+}
+
+// Define your Project model
+model Project {
+  id        String   @id @default(cuid())
+  name      String
+  client    String
+  status    String
+  address   String?
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Add other models here later (Client, Task, User, etc.)
