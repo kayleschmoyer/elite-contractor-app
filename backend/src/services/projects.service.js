@@ -1,86 +1,154 @@
 // backend/src/services/projects.service.js
-import ProjectModel from '../models/project.model.js';
-import logger from '../utils/logger.js';
+import prisma from '../config/db.js'; // Import the Prisma client instance
+import logger from '../utils/logger.js'; // Import logger utility
 
-const getAllProjects = async () => {
+/**
+ * Gets all projects belonging to a specific user.
+ * @param {string} userId - The ID of the user whose projects to retrieve.
+ * @returns {Promise<Array<object>>} An array of project objects belonging to the user.
+ * @throws {Error} If there's an error querying the database.
+ */
+const getAllProjects = async (userId) => {
+    if (!userId) {
+        // Should be caught by controller, but good to be defensive
+        throw new Error('User ID is required to fetch projects.');
+    }
     try {
-        // Business logic could go here (e.g., filtering based on user roles)
-        const projects = await ProjectModel.findAll();
+        const projects = await prisma.project.findMany({
+            // Filter projects where the authorId matches the provided userId
+            where: {
+                authorId: userId
+            },
+            orderBy: {
+                createdAt: 'desc', // Optional: Order projects by creation date, newest first
+            }
+        });
         return projects;
     } catch (error) {
-        logger.error('Error fetching projects:', error);
-        // You might want specific error types here
-        throw new Error('Could not retrieve projects');
+        logger.error(`Error fetching projects for user ${userId}:`, error);
+        // Re-throw a more generic error or handle specific Prisma errors
+        throw new Error('Could not retrieve projects from database.');
     }
 };
 
+/**
+ * Gets a single project by its ID.
+ * Note: Ownership check is primarily handled in the controller in this iteration.
+ * @param {string} id - The ID of the project to retrieve.
+ * @returns {Promise<object|null>} The project object if found, otherwise null.
+ * @throws {Error} If there's an error querying the database.
+ */
 const getProjectById = async (id) => {
      try {
-        const project = await ProjectModel.findById(id);
-        // Business logic: Check if user has permission to view this project?
-        if (!project) {
-            return null; // Service indicates not found
-        }
-        return project;
+        const project = await prisma.project.findUnique({
+            where: { id: id },
+            // Ensure necessary fields like authorId are selected if not default
+        });
+        return project; // Prisma returns null if findUnique doesn't find a record
     } catch (error) {
-        logger.error(`Error fetching project ${id}:`, error);
-        throw new Error('Could not retrieve project');
+        logger.error(`Error fetching project by ID ${id}:`, error);
+        throw new Error('Could not retrieve project details from database.');
     }
 };
 
-// --- Add Services for Create, Update, Delete ---
-const createProject = async (projectData) => {
+/**
+ * Creates a new project and associates it with the provided user ID.
+ * @param {object} projectData - Data for the new project (e.g., { name, client, status, ...}).
+ * @param {string} userId - The ID of the user creating the project.
+ * @returns {Promise<object>} The newly created project object.
+ * @throws {Error} If validation fails or there's an error saving to the database.
+ */
+const createProject = async (projectData, userId) => {
+    if (!userId) {
+        throw new Error('User ID is required to create a project.');
+    }
     try {
-        // Add validation logic here (e.g., using a library like Zod or Joi)
-        // Ensure required fields are present, data types are correct, etc.
-        // Example basic check:
+        // Basic validation example (can be expanded with libraries like Zod/Joi)
         if (!projectData.name || !projectData.client || !projectData.status) {
+            // Throwing error here will be caught by the controller's catch block
             throw new Error('Missing required project fields: name, client, status');
         }
 
-        const newProject = await ProjectModel.create(projectData);
+        const newProject = await prisma.project.create({
+            data: {
+                name: projectData.name,
+                client: projectData.client,
+                status: projectData.status,
+                address: projectData.address, // Will be null if not provided
+                notes: projectData.notes,     // Will be null if not provided
+                // --- Link to the author ---
+                authorId: userId
+            },
+        });
         return newProject;
     } catch (error) {
-        logger.error('Error creating project:', error);
-        // Re-throw validation errors or database errors appropriately
-        throw error; // Let controller handle specific error types if needed
+        logger.error(`Error creating project for user ${userId}:`, error);
+        // Handle potential Prisma-specific errors (e.g., unique constraints) if necessary
+        // Re-throw a more generic error
+        throw new Error('Could not save project to database.');
     }
 };
 
+/**
+ * Updates an existing project by its ID.
+ * Note: Ownership check should be performed in the controller *before* calling this function.
+ * @param {string} id - The ID of the project to update.
+ * @param {object} updateData - An object containing the fields to update.
+ * @returns {Promise<object|null>} The updated project object, or null if the project was not found.
+ * @throws {Error} If there's an error updating the database.
+ */
  const updateProject = async (id, updateData) => {
     try {
-        // Add validation for update data
-        const updatedProject = await ProjectModel.update(id, updateData);
+        // Prisma's update throws P2025 error if record to update not found.
+        const updatedProject = await prisma.project.update({
+            where: { id: id },
+            data: updateData, // Only includes fields to be changed
+        });
         return updatedProject;
     } catch (error) {
-         logger.error(`Error updating project ${id}:`, error);
-         // Handle specific Prisma errors (e.g., P2025 Record not found)
+         logger.error(`Error updating project ${id} in DB:`, error);
+         // Check for Prisma's specific "Record not found" error
          if (error.code === 'P2025') {
-             return null; // Indicate not found for update
+             // 'Record to update not found.' - Service layer indicates not found by returning null.
+             return null;
          }
-        throw new Error('Could not update project');
+         // Re-throw other database errors
+        throw new Error('Could not update project in database.');
     }
 };
 
+/**
+ * Deletes a project by its ID.
+ * Note: Ownership check should be performed in the controller *before* calling this function.
+ * @param {string} id - The ID of the project to delete.
+ * @returns {Promise<boolean>} True if the project was successfully deleted, false if it was not found.
+ * @throws {Error} If there's an error deleting from the database.
+ */
 const deleteProject = async (id) => {
     try {
-        await ProjectModel.remove(id);
-        // No return value needed on successful delete usually
-        return true; // Indicate success
+        // Prisma's delete throws P2025 error if record to delete not found.
+        await prisma.project.delete({
+            where: { id: id },
+        });
+        return true; // Indicate successful deletion
     } catch (error) {
-         logger.error(`Error deleting project ${id}:`, error);
+         logger.error(`Error deleting project ${id} from DB:`, error);
+         // Check for Prisma's specific "Record not found" error
          if (error.code === 'P2025') {
-             return false; // Indicate not found for delete
+             // 'Record to delete not found.' - Service layer indicates not found by returning false.
+             return false;
          }
-        throw new Error('Could not delete project');
+         // Re-throw other database errors
+        throw new Error('Could not delete project from database.');
     }
 };
 
 
+// Export all service functions
 const ProjectService = {
     getAllProjects,
     getProjectById,
-    createProject, // Add new service functions
+    createProject,
     updateProject,
     deleteProject
 };

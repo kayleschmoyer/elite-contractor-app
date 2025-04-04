@@ -6,10 +6,32 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL") // Reads from backend/.env file
+  url      = env("DATABASE_URL")
 }
 
-// Define your Project model
+// --- Define Roles Enum ---
+enum Role {
+  ADMIN // Can manage users within their company, etc.
+  USER  // Standard user with limited permissions
+  // Add other roles later if needed (e.g., MANAGER, VIEWER)
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // --- New Fields ---
+  role      Role     @default(USER) // Default new users to standard role
+  companyId String                 // Identifier for the company the user belongs to
+
+  // --- Existing Relation ---
+  projects Project[] // Projects created by this user
+}
+
 model Project {
   id        String   @id @default(cuid())
   name      String
@@ -17,9 +39,25 @@ model Project {
   status    String
   address   String?
   notes     String?
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // --- Existing Relation ---
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  authorId  String?
+
+  // --- New Field ---
+  companyId String // Identifier for the company this project belongs to
+  // Optional: Add an index for faster querying by companyId
+  // @@index([companyId])
 }
 
-// Add other models here later (Client, Task, User, etc.)
+// --- Optional: Define a Company model later ---
+// model Company {
+//   id      String    @id @default(cuid())
+//   name    String
+//   users   User[]    // Users belonging to this company
+//   projects Project[] // Projects belonging to this company
+//   // ... other company details
+// }
+// If you add a Company model, change companyId fields above to link to it via @relation
