@@ -1,31 +1,24 @@
 // backend/src/routes/index.js
 import { Router } from 'express';
-import projectRoutes from './projects.routes.js'; // Routes for project CRUD
-import authRoutes from './auth.routes.js'; // Routes for user registration and login
+import projectRoutes from './projects.routes.js';
+import authRoutes from './auth.routes.js';
+import userRoutes from './users.routes.js'; // <-- Import user routes
 
-// Create the main router instance
 const router = Router();
 
-// --- Mount Authentication Routes ---
-// Requests to /api/auth/... will be handled by authRoutes
+// Mount auth routes first
 router.use('/auth', authRoutes);
 
-// --- Mount Project Routes ---
-// Requests to /api/projects/... will be handled by projectRoutes
-// We will add authentication middleware here later to protect these routes
+// Mount user management routes (requires auth + admin role)
+router.use('/users', userRoutes); // <-- Mount user routes under /api/users
+
+// Mount project routes (requires auth)
 router.use('/projects', projectRoutes);
 
 
-// --- Simple Health Check Route ---
-// Accessible at /api/health
+// Health check
 router.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'UP',
-    timestamp: new Date().toISOString(),
-    // You could add checks for database connectivity here later
-  });
+  res.status(200).json({ status: 'UP', timestamp: new Date().toISOString() });
 });
 
-
-// Export the main router to be used in server.js
 export default router;

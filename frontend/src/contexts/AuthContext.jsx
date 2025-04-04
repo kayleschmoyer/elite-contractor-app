@@ -42,11 +42,13 @@ export function AuthProvider({ children }) {
             // Claims like 'userId', 'email', 'name' should be in the JWT payload
             const decodedToken = jwtDecode(accessToken);
             const userData = {
-                id: decodedToken.userId, // Make sure backend JWT includes userId
+                id: decodedToken.userId, // Or decodedToken.sub if you used that standard claim
                 email: decodedToken.email,
-                name: decodedToken.name || '', // Include name if available in token
-                // Add other relevant info from token if needed
+                name: decodedToken.name || '', // Handle if name is optional in token
+                role: decodedToken.role, // <-- Make sure this line is added/correct
+                companyId: decodedToken.companyId // <-- Make sure this line is added/correct
             };
+            setUser(userData); // This line should already be there after the object definition
 
             localStorage.setItem(AUTH_TOKEN_KEY, accessToken); // Store token
             setToken(accessToken);
@@ -77,9 +79,11 @@ export function AuthProvider({ children }) {
                 // }
 
                 const userData = {
-                    id: decodedToken.userId,
+                    id: decodedToken.userId, // Or decodedToken.sub if you used that standard claim
                     email: decodedToken.email,
-                    name: decodedToken.name || '',
+                    name: decodedToken.name || '', // Handle if name is optional in token
+                    role: decodedToken.role, // <-- Make sure this line is added/correct
+                    companyId: decodedToken.companyId // <-- Make sure this line is added/correct
                 };
                 setToken(currentToken);
                 setUser(userData);
