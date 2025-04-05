@@ -1,35 +1,43 @@
 // backend/src/routes/projects.routes.js
 import { Router } from 'express';
 import ProjectController from '../controllers/projects.controller.js';
-import authMiddleware from '../middleware/authMiddleware.js'; // <-- Import the middleware
+import authMiddleware from '../middleware/authMiddleware.js';
+// --- Import Validation ---
+import { validate } from '../middleware/validationMiddleware.js';
+import {
+    createProjectSchema,
+    updateProjectSchema,
+    projectIdParamSchema
+} from '../validations/project.validations.js';
+// --- End Imports ---
 
-// Create a new router instance specifically for project routes
 const router = Router();
 
-// --- Apply Authentication Middleware ---
-// This line ensures that ALL routes defined in this file below this point
-// will first pass through the authMiddleware. If the user is not authenticated
-// (i.e., doesn't provide a valid JWT), the middleware will send back a 401
-// response, and the ProjectController functions will not be reached.
+// Apply Authentication Middleware to ALL project routes first
 router.use(authMiddleware);
 
-// --- Protected Project Routes ---
+// --- Protected Project Routes with Validation ---
 
-// GET /api/projects - Get all projects for the logged-in user (needs controller update later)
+// GET /api/projects - Get all projects for the logged-in user
+// No specific validation needed for query/params currently, add later if filtering is added
 router.get('/', ProjectController.getProjects);
 
-// POST /api/projects - Create a new project for the logged-in user (needs controller update later)
-router.post('/', ProjectController.createNewProject);
+// POST /api/projects - Create a new project
+// Validate request body using createProjectSchema
+router.post('/', validate(createProjectSchema), ProjectController.createNewProject);
 
-// GET /api/projects/:id - Get a specific project by ID (needs controller update for authorization later)
-router.get('/:id', ProjectController.getSingleProject);
+// GET /api/projects/:id - Get a specific project by ID
+// Validate URL parameter 'id' using projectIdParamSchema
+router.get('/:id', validate(projectIdParamSchema), ProjectController.getSingleProject);
 
-// PUT /api/projects/:id - Update a specific project by ID (needs controller update for authorization later)
-router.put('/:id', ProjectController.updateExistingProject);
+// PUT /api/projects/:id - Update a specific project by ID
+// Validate URL param 'id' AND request body using updateProjectSchema
+router.put('/:id', validate(updateProjectSchema), ProjectController.updateExistingProject);
 
-// DELETE /api/projects/:id - Delete a specific project by ID (needs controller update for authorization later)
-router.delete('/:id', ProjectController.deleteSingleProject);
+// DELETE /api/projects/:id - Delete a specific project by ID
+// Validate URL parameter 'id' using projectIdParamSchema
+router.delete('/:id', validate(projectIdParamSchema), ProjectController.deleteSingleProject);
 
 
-// Export the protected project router
+// Export the protected and validated project router
 export default router;
