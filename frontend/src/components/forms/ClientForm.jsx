@@ -1,40 +1,27 @@
 // frontend/src/components/forms/ClientForm.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // Added useEffect
 
-// --- Basic Styles (Consider moving to CSS) ---
-const formStyle = {
-    padding: 'var(--spacing-lg)',
-    border: '1px solid var(--color-border)',
-    borderRadius: 'var(--border-radius)',
-    marginBottom: 'var(--spacing-lg)',
-    backgroundColor: 'var(--color-background-secondary)',
-    maxWidth: '500px', // Limit form width
-};
-const inputGroupStyle = { marginBottom: 'var(--spacing-md)' };
-const labelStyle = { display: 'block', marginBottom: 'var(--spacing-xs)', fontWeight: 'bold' };
-const inputStyle = {
-    width: '100%',
-    padding: 'var(--spacing-sm)',
-    border: '1px solid var(--color-border)',
-    borderRadius: 'var(--border-radius)',
-    fontSize: 'inherit',
-};
-const buttonGroupStyle = { display: 'flex', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-lg)' };
-const buttonStyle = {
-    padding: 'var(--spacing-sm) var(--spacing-md)',
-    border: 'none',
-    borderRadius: 'var(--border-radius)',
-    cursor: 'pointer',
-    fontSize: 'inherit',
-};
-const submitButtonStyle = { ...buttonStyle, backgroundColor: 'var(--color-accent-primary)', color: 'white' };
-const cancelButtonStyle = { ...buttonStyle, backgroundColor: 'var(--color-background-secondary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' };
-const errorTextStyle = { color: 'var(--color-error)', fontSize: 'var(--font-size-sm)', marginTop: 'var(--spacing-xs)' };
-// --- End Styles ---
+// --- MUI Imports ---
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import TextField from '@mui/material/TextField';
+// --- End MUI Imports ---
 
+// --- Remove old style constants ---
+// const formStyle = { ... };
+// const inputGroupStyle = { ... };
+// const labelStyle = { ... };
+// const inputStyle = { ... };
+// const buttonGroupStyle = { ... };
+// const buttonStyle = { ... };
+// const submitButtonStyle = { ... };
+// const cancelButtonStyle = { ... };
+// const errorTextStyle = { ... };
+// --- End Remove Styles ---
 
 /**
- * A form for creating (and potentially editing) clients.
+ * A form for creating or editing clients, using Material UI.
  * @param {object} props
  * @param {function} props.onSubmit - Function to call when form is submitted (receives form data).
  * @param {function} props.onCancel - Function to call when cancel button is clicked.
@@ -42,7 +29,7 @@ const errorTextStyle = { color: 'var(--color-error)', fontSize: 'var(--font-size
  * @param {object} [props.initialData={}] - Initial data for editing (optional).
  */
 function ClientForm({ onSubmit, onCancel, isSubmitting = false, initialData = {} }) {
-    // Initialize form state
+    // --- State Variables (Copied from your version) ---
     const [formData, setFormData] = useState({
         name: initialData.name || '',
         email: initialData.email || '',
@@ -50,8 +37,22 @@ function ClientForm({ onSubmit, onCancel, isSubmitting = false, initialData = {}
         address: initialData.address || '',
     });
     const [errors, setErrors] = useState({});
+    // --- End State Variables ---
 
-    // Handle input changes
+    // --- useEffect to reset form when initialData changes (for consistency) ---
+    useEffect(() => {
+        setFormData({
+            name: initialData.name || '',
+            email: initialData.email || '',
+            phone: initialData.phone || '',
+            address: initialData.address || '',
+        });
+        setErrors({}); // Clear errors when switching client/mode
+    }, [initialData]); // Depend on initialData reference
+    // --- End useEffect ---
+
+
+    // --- Handlers (Copied from your version) ---
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prevData => ({
@@ -64,111 +65,126 @@ function ClientForm({ onSubmit, onCancel, isSubmitting = false, initialData = {}
         }
     };
 
-    // Basic Validation
+    // Basic Validation (Copied from your version)
     const validateForm = () => {
         const newErrors = {};
         if (!formData.name.trim()) {
             newErrors.name = "Client name is required.";
         }
-        // Optional: Add validation for email format if email is entered
         if (formData.email.trim() && !/\S+@\S+\.\S+/.test(formData.email)) {
             newErrors.email = "Email address is invalid.";
         }
-        // Optional: Add validation for phone format if entered
-        // ...
-
+        // Add other validations if needed
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0; // True if no errors
     };
 
-    // Handle form submission
+    // Handle form submission (Copied from your version)
     const handleSubmit = (e) => {
         e.preventDefault();
         if (validateForm()) {
-            // Pass validated data up to the parent component's onSubmit handler
-            onSubmit(formData);
+             // Prepare data, trimming optional fields or sending null
+            const dataToSubmit = {
+                 name: formData.name.trim(),
+                 email: formData.email.trim() || null,
+                 phone: formData.phone.trim() || null,
+                 address: formData.address.trim() || null,
+            };
+            onSubmit(dataToSubmit);
         }
     };
+    // --- End Handlers ---
 
+    // --- MUI Rendering ---
     return (
-        <form onSubmit={handleSubmit} style={formStyle}>
-            <h3>{initialData.id ? 'Edit Client' : 'Add New Client'}</h3>
+        <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
+            {/* Title is usually handled by the DialogTitle */}
+            {/* <Typography variant="h6">{initialData.id ? 'Edit Client' : 'Add New Client'}</Typography> */}
 
-            {/* Name Input (Required) */}
-            <div style={inputGroupStyle}>
-                <label htmlFor="name" style={labelStyle}>Client Name:</label>
-                <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    style={inputStyle}
-                    disabled={isSubmitting}
-                    required
-                    aria-invalid={!!errors.name}
-                    aria-describedby={errors.name ? "name-error" : undefined}
-                />
-                {errors.name && <p id="name-error" style={errorTextStyle}>{errors.name}</p>}
-            </div>
+            {/* Name TextField (Required) */}
+            <TextField
+                margin="normal"
+                required
+                fullWidth
+                id="name"
+                label="Client Name"
+                name="name"
+                autoComplete="organization" // Hint for browser
+                value={formData.name}
+                onChange={handleChange}
+                disabled={isSubmitting}
+                error={!!errors.name}
+                helperText={errors.name || ''}
+                autoFocus // Focus name field first
+            />
 
-            {/* Email Input (Optional) */}
-            <div style={inputGroupStyle}>
-                <label htmlFor="email" style={labelStyle}>Email:</label>
-                <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    style={inputStyle}
-                    disabled={isSubmitting}
-                    aria-invalid={!!errors.email}
-                    aria-describedby={errors.email ? "email-error" : undefined}
-                />
-                {errors.email && <p id="email-error" style={errorTextStyle}>{errors.email}</p>}
-            </div>
+            {/* Email TextField (Optional) */}
+            <TextField
+                margin="normal"
+                fullWidth
+                id="email"
+                label="Email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                value={formData.email}
+                onChange={handleChange}
+                disabled={isSubmitting}
+                error={!!errors.email}
+                helperText={errors.email || ''}
+            />
 
-            {/* Phone Input (Optional) */}
-            <div style={inputGroupStyle}>
-                <label htmlFor="phone" style={labelStyle}>Phone:</label>
-                <input
-                    type="tel" // Use 'tel' type for potential mobile optimizations
-                    id="phone"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    style={inputStyle}
-                    disabled={isSubmitting}
-                />
-                {/* Optional validation message */}
-            </div>
+            {/* Phone TextField (Optional) */}
+            <TextField
+                margin="normal"
+                fullWidth
+                id="phone"
+                label="Phone"
+                name="phone"
+                type="tel" // Use 'tel' type
+                autoComplete="tel"
+                value={formData.phone}
+                onChange={handleChange}
+                disabled={isSubmitting}
+                error={!!errors.phone} // If you add phone validation
+                helperText={errors.phone || ''}
+            />
 
-            {/* Address Input (Optional) */}
-            <div style={inputGroupStyle}>
-                <label htmlFor="address" style={labelStyle}>Address:</label>
-                <textarea
-                    id="address"
-                    name="address"
-                    value={formData.address}
-                    onChange={handleChange}
-                    rows="3"
-                    style={inputStyle}
-                    disabled={isSubmitting}
-                ></textarea>
-                {/* Optional validation message */}
-            </div>
+            {/* Address TextField (Optional, Multiline) */}
+            <TextField
+                margin="normal"
+                fullWidth
+                id="address"
+                label="Address"
+                name="address"
+                multiline
+                rows={4}
+                value={formData.address}
+                onChange={handleChange}
+                disabled={isSubmitting}
+                error={!!errors.address} // If you add address validation
+                helperText={errors.address || ''}
+            />
 
             {/* Action Buttons */}
-            <div style={buttonGroupStyle}>
-                <button type="submit" style={submitButtonStyle} disabled={isSubmitting}>
-                    {isSubmitting ? 'Saving...' : (initialData.id ? 'Save Changes' : 'Add Client')}
-                </button>
-                <button type="button" onClick={onCancel} style={cancelButtonStyle} disabled={isSubmitting}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 3 }}>
+                <Button
+                    onClick={onCancel} // Trigger cancel callback from parent
+                    disabled={isSubmitting}
+                    variant="outlined"
+                >
                     Cancel
-                </button>
-            </div>
-        </form>
+                </Button>
+                <Button
+                    type="submit"
+                    disabled={isSubmitting}
+                    variant="contained"
+                    sx={{ minWidth: 100 }}
+                >
+                    {isSubmitting ? <CircularProgress size={24} color="inherit" /> : (initialData.id ? 'Save Changes' : 'Add Client')}
+                </Button>
+            </Box>
+        </Box> // End Form Box
     );
 }
 

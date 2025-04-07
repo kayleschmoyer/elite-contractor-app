@@ -1,49 +1,30 @@
 // frontend/src/components/forms/UserForm.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // Added useEffect import
 
-// --- Basic Styles (Consider moving to CSS) ---
-const formStyle = {
-    padding: 'var(--spacing-lg)',
-    border: '1px solid var(--color-border)',
-    borderRadius: 'var(--border-radius)',
-    marginBottom: 'var(--spacing-lg)',
-    backgroundColor: 'var(--color-background-secondary)',
-    maxWidth: '500px', // Limit form width
-};
-const inputGroupStyle = { marginBottom: 'var(--spacing-md)' };
-const labelStyle = { display: 'block', marginBottom: 'var(--spacing-xs)', fontWeight: 'bold' };
-const inputStyle = {
-    width: '100%',
-    padding: 'var(--spacing-sm)',
-    border: '1px solid var(--color-border)',
-    borderRadius: 'var(--border-radius)',
-    fontSize: 'inherit',
-};
-const selectStyle = { ...inputStyle }; // Use same base style for select
-const buttonGroupStyle = { display: 'flex', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-lg)' };
-const buttonStyle = {
-    padding: 'var(--spacing-sm) var(--spacing-md)',
-    border: 'none',
-    borderRadius: 'var(--border-radius)',
-    cursor: 'pointer',
-    fontSize: 'inherit',
-};
-const submitButtonStyle = { ...buttonStyle, backgroundColor: 'var(--color-accent-primary)', color: 'white' };
-const cancelButtonStyle = { ...buttonStyle, backgroundColor: 'var(--color-background-secondary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' };
-const errorTextStyle = { color: 'var(--color-error)', fontSize: 'var(--font-size-sm)', marginTop: 'var(--spacing-xs)' };
-// --- End Styles ---
+// --- MUI Imports ---
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import FormControl from '@mui/material/FormControl';
+import FormHelperText from '@mui/material/FormHelperText';
+import InputLabel from '@mui/material/InputLabel';
+import MenuItem from '@mui/material/MenuItem';
+import Select from '@mui/material/Select';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography'; // For Title if needed inside dialog
+// --- End MUI Imports ---
 
 
 /**
- * A form for creating (and potentially editing) users by an Admin.
+ * A form for creating or editing users by an Admin, using Material UI.
  * @param {object} props
  * @param {function} props.onSubmit - Function to call when form is submitted (receives form data).
  * @param {function} props.onCancel - Function to call when cancel button is clicked.
  * @param {boolean} [props.isSubmitting=false] - Flag to disable form during submission.
- * @param {object} [props.initialData={}] - Initial data for editing (not used yet).
+ * @param {object} [props.initialData={}] - Initial data for editing.
  */
 function UserForm({ onSubmit, onCancel, isSubmitting = false, initialData = {} }) {
-    // Initialize form state (using initialData for future edit functionality)
+    // --- State Variables (Copied from your version) ---
     const [formData, setFormData] = useState({
         name: initialData.name || '',
         email: initialData.email || '',
@@ -51,8 +32,21 @@ function UserForm({ onSubmit, onCancel, isSubmitting = false, initialData = {} }
         role: initialData.role || 'USER', // Default new users to 'USER' role
     });
     const [errors, setErrors] = useState({});
+    // --- End State Variables ---
 
-    // Handle input changes
+    // --- useEffect to reset form when initialData changes (for editing) ---
+    useEffect(() => {
+         setFormData({
+             name: initialData.name || '',
+             email: initialData.email || '',
+             password: '', // Always clear password field when data changes
+             role: initialData.role || 'USER',
+         });
+         setErrors({}); // Clear errors when switching user/mode
+     }, [initialData]); // Depend only on initialData reference
+     // --- End useEffect ---
+
+    // --- Handlers (Copied from your version) ---
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prevData => ({
@@ -65,7 +59,7 @@ function UserForm({ onSubmit, onCancel, isSubmitting = false, initialData = {} }
         }
     };
 
-    // Basic Validation (expand as needed)
+    // Basic Validation (Copied from your version)
     const validateForm = () => {
         const newErrors = {};
         if (!formData.email.trim()) {
@@ -73,11 +67,12 @@ function UserForm({ onSubmit, onCancel, isSubmitting = false, initialData = {} }
         } else if (!/\S+@\S+\.\S+/.test(formData.email)) { // Basic email format check
             newErrors.email = "Email address is invalid.";
         }
-        // Password required only when creating (initialData.id doesn't exist)
-        // Add complexity checks later if needed
+        // Password required only when creating (initialData doesn't have id yet)
+        // Or if user explicitly types in password field during edit
         if (!initialData.id && !formData.password) {
             newErrors.password = "Password is required for new users.";
-        } else if (!initialData.id && formData.password.length < 8) {
+        } else if (formData.password && formData.password.length < 8) {
+             // Validate password length only if a password was entered
              newErrors.password = "Password must be at least 8 characters long.";
         }
         if (!formData.role) newErrors.role = "Role is required.";
@@ -86,106 +81,118 @@ function UserForm({ onSubmit, onCancel, isSubmitting = false, initialData = {} }
         return Object.keys(newErrors).length === 0; // True if no errors
     };
 
-    // Handle form submission
+    // Handle form submission (Copied from your version)
     const handleSubmit = (e) => {
         e.preventDefault();
         if (validateForm()) {
-            // Pass the validated form data up to the parent component's onSubmit handler
-            onSubmit(formData);
+            // Prepare data to submit - exclude password if editing and field is empty
+             const dataToSubmit = {
+                 name: formData.name.trim() || null, // Send null if empty? Or handle in service? Keep trim.
+                 email: formData.email.trim(),
+                 role: formData.role,
+                 // Only include password if creating OR if editing AND it's been typed into
+                 ...((!initialData.id || formData.password) && { password: formData.password })
+             };
+            onSubmit(dataToSubmit);
         }
     };
+    // --- End Handlers ---
 
+
+    // --- MUI Rendering ---
     return (
-        <form onSubmit={handleSubmit} style={formStyle}>
-            {/* Adapt title based on whether we are editing or creating */}
-            <h3>{initialData.id ? 'Edit User' : 'Add New User'}</h3>
+        // Use Box as the form container
+        <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
+            {/* Title is usually handled by the DialogTitle containing this form */}
+            {/* <Typography component="h3" variant="h6">{initialData.id ? 'Edit User' : 'Add New User'}</Typography> */}
 
-            {/* Name Input */}
-            <div style={inputGroupStyle}>
-                <label htmlFor="name" style={labelStyle}>Name:</label>
-                <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    style={inputStyle}
-                    disabled={isSubmitting}
-                />
-                {/* Optional validation message */}
-                 {errors.name && <p style={errorTextStyle}>{errors.name}</p>}
-            </div>
+            {/* Name TextField */}
+            <TextField
+                margin="normal"
+                fullWidth
+                id="name"
+                label="Name"
+                name="name"
+                autoComplete="name"
+                value={formData.name}
+                onChange={handleChange}
+                disabled={isSubmitting}
+                error={!!errors.name}
+                helperText={errors.name || ''}
+            />
 
-            {/* Email Input */}
-            <div style={inputGroupStyle}>
-                <label htmlFor="email" style={labelStyle}>Email:</label>
-                <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    style={inputStyle}
-                    disabled={isSubmitting || initialData.id} // Disable email editing for now
-                    required
-                    aria-invalid={!!errors.email}
-                    aria-describedby={errors.email ? "email-error" : undefined}
-                />
-                 {errors.email && <p id="email-error" style={errorTextStyle}>{errors.email}</p>}
-            </div>
+            {/* Email TextField */}
+            <TextField
+                margin="normal"
+                required
+                fullWidth
+                id="email"
+                label="Email Address"
+                name="email"
+                type="email"
+                autoComplete="email"
+                value={formData.email}
+                onChange={handleChange}
+                // Generally disable email editing, can be changed based on requirements
+                disabled={isSubmitting || !!initialData.id}
+                error={!!errors.email}
+                helperText={errors.email || ''}
+            />
 
-            {/* Password Input (only required for new users) */}
-            {/* Conditionally render or just change label/required status for edit later */}
-            <div style={inputGroupStyle}>
-                <label htmlFor="password" style={labelStyle}>
-                    {initialData.id ? 'New Password (optional):' : 'Password:'}
-                </label>
-                <input
-                    type="password"
-                    id="password"
-                    name="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    style={inputStyle}
-                    disabled={isSubmitting}
-                    required={!initialData.id} // Required only when creating
-                    aria-invalid={!!errors.password}
-                    aria-describedby={errors.password ? "password-error" : undefined}
-                />
-                 {errors.password && <p id="password-error" style={errorTextStyle}>{errors.password}</p>}
-            </div>
+            {/* Password TextField */}
+            <TextField
+                margin="normal"
+                required={!initialData.id} // Only required when creating
+                fullWidth
+                name="password"
+                label={initialData.id ? 'New Password (leave blank to keep unchanged)' : 'Password'}
+                type="password"
+                id="password"
+                autoComplete="new-password" // Important for password managers
+                value={formData.password}
+                onChange={handleChange}
+                disabled={isSubmitting}
+                error={!!errors.password}
+                helperText={errors.password || ''}
+            />
 
-            {/* Role Selection */}
-            <div style={inputGroupStyle}>
-                <label htmlFor="role" style={labelStyle}>Role:</label>
-                <select
-                    id="role"
+            {/* Role Select */}
+            <FormControl fullWidth margin="normal" required error={!!errors.role}>
+                <InputLabel id="role-select-label">Role</InputLabel>
+                <Select
+                    labelId="role-select-label"
+                    id="role-select"
                     name="role"
                     value={formData.role}
+                    label="Role" // Required by InputLabel
                     onChange={handleChange}
-                    style={selectStyle}
                     disabled={isSubmitting}
-                    required
                 >
-                    {/* Ensure values match the Role enum strings defined in Prisma */}
-                    <option value="USER">Standard User</option>
-                    <option value="ADMIN">Administrator</option>
-                    {/* Add other roles if defined */}
-                </select>
-                 {errors.role && <p style={errorTextStyle}>{errors.role}</p>}
-            </div>
+                    {/* Ensure these values match your Prisma Role Enum strings */}
+                    <MenuItem value="USER">Standard User</MenuItem>
+                    <MenuItem value="ADMIN">Administrator</MenuItem>
+                </Select>
+                {errors.role && <FormHelperText>{errors.role}</FormHelperText>}
+            </FormControl>
 
             {/* Action Buttons */}
-            <div style={buttonGroupStyle}>
-                <button type="submit" style={submitButtonStyle} disabled={isSubmitting}>
-                    {isSubmitting ? 'Saving...' : (initialData.id ? 'Save Changes' : 'Add User')}
-                </button>
-                {/* Provide a cancel callback */}
-                <button type="button" onClick={onCancel} style={cancelButtonStyle} disabled={isSubmitting}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 3 }}>
+                <Button
+                    onClick={onCancel} // Trigger cancel callback
+                    disabled={isSubmitting}
+                    variant="outlined" // Use outlined style for secondary action
+                >
                     Cancel
-                </button>
-            </div>
-        </form>
+                </Button>
+                <Button
+                    type="submit" // HTML form submission trigger
+                    disabled={isSubmitting}
+                    variant="contained" // Use contained style for primary action
+                >
+                    {isSubmitting ? <CircularProgress size={24} /> : (initialData.id ? 'Save Changes' : 'Add User')}
+                </Button>
+            </Box>
+        </Box>
     );
 }
 

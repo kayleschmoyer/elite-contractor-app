@@ -1,33 +1,50 @@
 // frontend/src/components/forms/TaskForm.jsx
 import React, { useState, useEffect } from 'react';
 
-// --- Basic Styles ---
-const formStyle = { padding: 'var(--spacing-lg)', border: '1px solid var(--color-border)', borderRadius: 'var(--border-radius)', marginBottom: 'var(--spacing-lg)', backgroundColor: 'var(--color-background-secondary)', maxWidth: '600px' };
-const inputGroupStyle = { marginBottom: 'var(--spacing-md)' };
-const labelStyle = { display: 'block', marginBottom: 'var(--spacing-xs)', fontWeight: 'bold' };
-const inputStyle = { width: '100%', padding: 'var(--spacing-sm)', border: '1px solid var(--color-border)', borderRadius: 'var(--border-radius)', fontSize: 'inherit' };
-const selectStyle = { ...inputStyle };
-const textareaStyle = { ...inputStyle, fontFamily: 'inherit' };
-const buttonGroupStyle = { display: 'flex', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-lg)' };
-const buttonStyle = { padding: 'var(--spacing-sm) var(--spacing-md)', border: 'none', borderRadius: 'var(--border-radius)', cursor: 'pointer', fontSize: 'inherit' };
-const submitButtonStyle = { ...buttonStyle, backgroundColor: 'var(--color-accent-primary)', color: 'white' };
-const cancelButtonStyle = { ...buttonStyle, backgroundColor: 'var(--color-background-secondary)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' };
-const errorTextStyle = { color: 'var(--color-error)', fontSize: 'var(--font-size-sm)', marginTop: 'var(--spacing-xs)' };
-// --- End Styles ---
+// --- MUI Imports ---
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import FormControl from '@mui/material/FormControl';
+import FormHelperText from '@mui/material/FormHelperText';
+import InputLabel from '@mui/material/InputLabel';
+import MenuItem from '@mui/material/MenuItem';
+import Select from '@mui/material/Select';
+import TextField from '@mui/material/TextField';
+// --- End MUI Imports ---
+
+// --- Remove old style constants ---
+// const formStyle = { ... };
+// const inputGroupStyle = { ... };
+// const labelStyle = { ... };
+// const inputStyle = { ... };
+// const selectStyle = { ... };
+// const textareaStyle = { ... };
+// const buttonGroupStyle = { ... };
+// const buttonStyle = { ... };
+// const submitButtonStyle = { ... };
+// const cancelButtonStyle = { ... };
+// const errorTextStyle = { ... };
+// --- End Remove Styles ---
 
 const taskStatusOptions = ['TODO', 'IN_PROGRESS', 'DONE', 'BLOCKED'];
 
 // Function to format ISO date string to YYYY-MM-DD for input[type=date]
+// (Keep this helper function as provided by you)
 const formatDateForInput = (dateString) => {
     if (!dateString) return '';
     try { return dateString.split('T')[0]; } catch (e) { return ''; }
 };
 
 /**
- * Form for creating or editing Tasks, includes dates and assignee.
+ * Form for creating or editing Tasks, using MUI components.
  * @param {object} props
- * // ... other props (onSubmit, onCancel, isSubmitting, initialData, companyUsers)
- * @param {string} props.projectId - Required projectId.
+ * @param {function} props.onSubmit - Receives validated form data object.
+ * @param {function} props.onCancel - Called when cancel button is clicked.
+ * @param {boolean} [props.isSubmitting=false] - Disables form during submission.
+ * @param {object} [props.initialData={}] - Pre-fills form for editing.
+ * @param {Array<object>} [props.companyUsers=[]] - List of users for assignee dropdown {id, name}.
+ * @param {string} props.projectId - ID of the project this task belongs to (needed for submission).
  */
 function TaskForm({
     onSubmit,
@@ -37,27 +54,25 @@ function TaskForm({
     companyUsers = [],
     projectId // Expect projectId to be passed for creating task context
 }) {
+    // --- State Variables (Keep existing state logic) ---
     const [formData, setFormData] = useState({
         title: initialData.title || '',
-        status: initialData.status || 'TODO',
+        status: initialData.status || 'TODO', // Default to 'TODO'
         notes: initialData.notes || '',
-        startDate: formatDateForInput(initialData.startDate), // <-- Add startDate
-        endDate: formatDateForInput(initialData.endDate),   // <-- Add endDate (was dueDate)
+        startDate: formatDateForInput(initialData.startDate),
+        endDate: formatDateForInput(initialData.endDate),
         priority: initialData.priority || '',
-        assigneeId: initialData.assigneeId || '',
+        assigneeId: initialData.assigneeId || '', // Default to unassigned ('')
     });
     const [errors, setErrors] = useState({});
+    // --- End State Variables ---
 
+    // --- useEffect for initialData (Keep existing logic) ---
     // Reset form if initialData (identified by ID) changes
     const {
-        id: initialId,
-        title: initialTitle,
-        status: initialStatus,
-        notes: initialNotes,
-        startDate: initialStartDate, // <-- Get initial start date
-        endDate: initialEndDate,     // <-- Get initial end date
-        priority: initialPriority,
-        assigneeId: initialAssigneeId
+        id: initialId, title: initialTitle, status: initialStatus,
+        notes: initialNotes, startDate: initialStartDate, endDate: initialEndDate,
+        priority: initialPriority, assigneeId: initialAssigneeId
     } = initialData;
 
     useEffect(() => {
@@ -65,27 +80,34 @@ function TaskForm({
              title: initialTitle || '',
              status: initialStatus || 'TODO',
              notes: initialNotes || '',
-             startDate: formatDateForInput(initialStartDate), // <-- Format start date
-             endDate: formatDateForInput(initialEndDate),     // <-- Format end date
+             startDate: formatDateForInput(initialStartDate),
+             endDate: formatDateForInput(initialEndDate),
              priority: initialPriority || '',
              assigneeId: initialAssigneeId || '',
         });
         setErrors({});
     // Depend on the specific primitive values from initialData
     }, [initialId, initialTitle, initialStatus, initialNotes, initialStartDate, initialEndDate, initialPriority, initialAssigneeId]);
+    // --- End useEffect ---
 
-
-    const handleChange = (e) => { /* ... same as before ... */
+    // --- Handlers (Keep existing logic) ---
+    const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
-        if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }));
+        if (errors[name]) {
+            setErrors(prev => ({ ...prev, [name]: null }));
+        }
     };
 
-    const validateForm = () => { /* ... same as before ... */
+    const validateForm = () => {
         const newErrors = {};
         if (!formData.title.trim()) newErrors.title = "Task title is required.";
-        if (formData.priority && (isNaN(parseInt(formData.priority)) || formData.priority < 1 || formData.priority > 5) ) newErrors.priority = "Priority must be 1-5.";
-        // Optional: Validate startDate <= endDate if both are provided
+        // Use formData.priority directly as it's string from input
+        const priorityVal = formData.priority;
+        if (priorityVal && (isNaN(parseInt(priorityVal)) || +priorityVal < 1 || +priorityVal > 5)) {
+             newErrors.priority = "Priority must be a number between 1 and 5 (optional).";
+        }
+        // Add other validations if needed (e.g., start date <= end date)
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -93,98 +115,154 @@ function TaskForm({
     const handleSubmit = (e) => {
         e.preventDefault();
         if (validateForm()) {
-            // Prepare data, ensuring empty dates/assignee/priority become null
+            // Prepare data for submission
             const dataToSubmit = {
                 title: formData.title.trim(),
                 status: formData.status,
                 notes: formData.notes.trim() || null,
-                startDate: formData.startDate || null, // <-- Add startDate
-                endDate: formData.endDate || null,     // <-- Add endDate
-                priority: formData.priority ? parseInt(formData.priority) : null,
-                assigneeId: formData.assigneeId || null,
+                startDate: formData.startDate || null,
+                endDate: formData.endDate || null,
+                priority: formData.priority ? parseInt(formData.priority) : null, // Convert to number or null
+                assigneeId: formData.assigneeId || null, // Convert '' to null
                 projectId: projectId // Add the projectId from props
             };
             onSubmit(dataToSubmit);
         }
     };
+    // --- End Handlers ---
 
+    // --- MUI Rendering ---
     return (
-        <form onSubmit={handleSubmit} style={formStyle}>
-            <h3>{initialData.id ? 'Edit Task' : 'Add New Task'}</h3>
+        <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
+            {/* Title is usually handled by DialogTitle */}
+            {/* <h3>{initialData.id ? 'Edit Task' : 'Add New Task'}</h3> */}
 
-            {/* Title Input */}
-            <div style={inputGroupStyle}>
-                <label htmlFor="title" style={labelStyle}>Title:</label>
-                <input type="text" id="title" name="title" value={formData.title} onChange={handleChange} style={inputStyle} disabled={isSubmitting} required aria-invalid={!!errors.title} aria-describedby={errors.title ? "title-error" : undefined}/>
-                {errors.title && <p id="title-error" style={errorTextStyle}>{errors.title}</p>}
-            </div>
+            {/* Title TextField */}
+            <TextField
+                margin="normal"
+                required
+                fullWidth
+                id="title"
+                label="Task Title"
+                name="title"
+                value={formData.title}
+                onChange={handleChange}
+                disabled={isSubmitting}
+                error={!!errors.title}
+                helperText={errors.title || ''}
+                autoFocus
+            />
 
             {/* Status Select */}
-            <div style={inputGroupStyle}>
-                <label htmlFor="status" style={labelStyle}>Status:</label>
-                <select id="status" name="status" value={formData.status} onChange={handleChange} style={selectStyle} disabled={isSubmitting} required>
-                    {taskStatusOptions.map(status => (<option key={status} value={status}>{status.replace('_', ' ')}</option>))}
-                </select>
-            </div>
+            <FormControl fullWidth margin="normal" required disabled={isSubmitting}>
+                <InputLabel id="status-select-label">Status</InputLabel>
+                <Select
+                    labelId="status-select-label"
+                    id="status-select"
+                    name="status"
+                    value={formData.status}
+                    label="Status" // Required by InputLabel
+                    onChange={handleChange}
+                >
+                    {taskStatusOptions.map(status => (
+                        <MenuItem key={status} value={status}>
+                            {status.replace('_', ' ')} {/* Replace underscores for display */}
+                        </MenuItem>
+                    ))}
+                </Select>
+            </FormControl>
 
             {/* Assignee Select */}
-            <div style={inputGroupStyle}>
-                <label htmlFor="assigneeId" style={labelStyle}>Assign To (Optional):</label>
-                <select id="assigneeId" name="assigneeId" value={formData.assigneeId} onChange={handleChange} style={selectStyle} disabled={isSubmitting || companyUsers.length === 0}>
-                    <option value="">-- Unassigned --</option>
-                    {companyUsers.map(user => (<option key={user.id} value={user.id}>{user.name || user.email}</option>))}
-                </select>
-                {companyUsers.length === 0 && !isSubmitting && <p style={{...errorTextStyle, color: 'var(--color-text-secondary)'}}>(No users available)</p>}
-            </div>
-
-            {/* --- Start Date Input (NEW) --- */}
-            <div style={inputGroupStyle}>
-                <label htmlFor="startDate" style={labelStyle}>Start Date (Optional):</label>
-                <input
-                    type="date"
-                    id="startDate"
-                    name="startDate"
-                    value={formData.startDate}
+            <FormControl fullWidth margin="normal" disabled={isSubmitting || companyUsers.length === 0}>
+                 <InputLabel id="assignee-select-label">Assign To (Optional)</InputLabel>
+                <Select
+                    labelId="assignee-select-label"
+                    id="assigneeId-select"
+                    name="assigneeId"
+                    value={formData.assigneeId}
+                    label="Assign To (Optional)" // Required by InputLabel
                     onChange={handleChange}
-                    style={inputStyle}
-                    disabled={isSubmitting}
-                />
-            </div>
+                >
+                    <MenuItem value="">
+                        <em>-- Unassigned --</em>
+                    </MenuItem>
+                    {companyUsers.map(user => (
+                        <MenuItem key={user.id} value={user.id}>
+                            {user.name || user.email}
+                        </MenuItem>
+                    ))}
+                </Select>
+                {companyUsers.length === 0 && <FormHelperText>No users available</FormHelperText>}
+            </FormControl>
 
-            {/* --- End Date Input (NEW - Replaces Due Date) --- */}
-            <div style={inputGroupStyle}>
-                <label htmlFor="endDate" style={labelStyle}>End Date (Optional):</label>
-                <input
-                    type="date"
-                    id="endDate"
-                    name="endDate"
-                    value={formData.endDate}
-                    onChange={handleChange}
-                    style={inputStyle}
-                    disabled={isSubmitting}
-                />
-            </div>
-            {/* --- End Date Inputs --- */}
+            {/* Start Date */}
+            <TextField
+                margin="normal"
+                fullWidth
+                id="startDate"
+                label="Start Date (Optional)"
+                name="startDate"
+                type="date"
+                InputLabelProps={{ shrink: true }} // Keep label shrunk
+                value={formData.startDate}
+                onChange={handleChange}
+                disabled={isSubmitting}
+            />
 
-            {/* Priority Input */}
-             <div style={inputGroupStyle}>
-                <label htmlFor="priority" style={labelStyle}>Priority (Optional, 1-5):</label>
-                <input type="number" id="priority" name="priority" value={formData.priority} onChange={handleChange} style={inputStyle} disabled={isSubmitting} min="1" max="5" step="1" aria-invalid={!!errors.priority} aria-describedby={errors.priority ? "priority-error" : undefined}/>
-                 {errors.priority && <p id="priority-error" style={errorTextStyle}>{errors.priority}</p>}
-            </div>
+            {/* End Date */}
+            <TextField
+                margin="normal"
+                fullWidth
+                id="endDate"
+                label="End Date (Optional)"
+                name="endDate"
+                type="date"
+                InputLabelProps={{ shrink: true }}
+                value={formData.endDate}
+                onChange={handleChange}
+                disabled={isSubmitting}
+            />
 
-            {/* Notes Textarea */}
-            <div style={inputGroupStyle}>
-                <label htmlFor="notes" style={labelStyle}>Notes (Optional):</label>
-                <textarea id="notes" name="notes" value={formData.notes} onChange={handleChange} style={textareaStyle} disabled={isSubmitting} rows="4"></textarea>
-            </div>
+            {/* Priority */}
+             <TextField
+                margin="normal"
+                fullWidth
+                id="priority"
+                label="Priority (Optional, 1-5)"
+                name="priority"
+                type="number" // Use number type
+                InputProps={{ inputProps: { min: 1, max: 5, step: 1 } }} // HTML5 constraints
+                value={formData.priority}
+                onChange={handleChange}
+                disabled={isSubmitting}
+                error={!!errors.priority}
+                helperText={errors.priority || ''}
+            />
+
+            {/* Notes */}
+            <TextField
+                margin="normal"
+                fullWidth
+                id="notes"
+                label="Notes (Optional)"
+                name="notes"
+                multiline
+                rows={4}
+                value={formData.notes}
+                onChange={handleChange}
+                disabled={isSubmitting}
+            />
 
             {/* Action Buttons */}
-            <div style={buttonGroupStyle}>
-                 <button type="submit" style={submitButtonStyle} disabled={isSubmitting}>{isSubmitting ? 'Saving...' : (initialData.id ? 'Save Task Changes' : 'Add Task')}</button>
-                <button type="button" onClick={onCancel} style={cancelButtonStyle} disabled={isSubmitting}>Cancel</button>
-            </div>
-        </form>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 3 }}>
+                <Button onClick={onCancel} disabled={isSubmitting} variant="outlined">
+                    Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting} variant="contained" sx={{ minWidth: 100 }}>
+                    {isSubmitting ? <CircularProgress size={24} color="inherit" /> : (initialData.id ? 'Save Task Changes' : 'Add Task')}
+                </Button>
+            </Box>
+        </Box> // End Form Box
     );
 }
 

@@ -1,6 +1,6 @@
 // frontend/src/features/projects/ProjectList.jsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom'; // <-- Import Link for navigation
+import { Link as RouterLink } from 'react-router-dom'; // Use alias for router link
 // Import Project APIs
 import { getProjects, deleteProject, createProject, updateProject } from '../../api/projectApi';
 // Import Client API
@@ -9,175 +9,130 @@ import { getCompanyClients } from '../../api/clientApi';
 import ProjectForm from './ProjectForm'; // Assuming ProjectForm is in the same directory
 import LoadingSpinner from '../../components/common/LoadingSpinner.jsx'; // Adjust path if needed
 
-// --- Basic Styles (Keep existing styles or move to CSS) ---
-const itemButtonStyle = {
-    marginLeft: 'var(--spacing-sm)',
-    padding: 'var(--spacing-xs) var(--spacing-sm)',
-    border: '1px solid var(--color-border)',
-    borderRadius: 'var(--border-radius)',
-    cursor: 'pointer',
-    fontSize: 'var(--font-size-sm)',
-    backgroundColor: 'transparent',
-    lineHeight: 1.2,
-};
-const deleteButtonStyle = { ...itemButtonStyle, borderColor: 'var(--color-error)', color: 'var(--color-error)'};
-const editButtonStyle = { ...itemButtonStyle, borderColor: 'var(--color-accent-secondary)', color: 'var(--color-accent-secondary)'};
-const createButtonStyle = {
-    padding: 'var(--spacing-sm) var(--spacing-md)',
-    border: 'none',
-    borderRadius: 'var(--border-radius)',
-    cursor: 'pointer',
-    fontSize: 'inherit',
-    backgroundColor: 'var(--color-accent-primary)',
-    color: 'white',
-    marginBottom: 'var(--spacing-lg)',
- };
- const errorBoxStyle = {
-    color: 'var(--color-error)',
-    marginBottom: 'var(--spacing-md)',
-    padding: 'var(--spacing-md)',
-    border: '1px solid var(--color-error)',
-    borderRadius: 'var(--border-radius)',
-    backgroundColor: 'rgba(220, 53, 69, 0.1)'
- };
- const listItemStyle = {
-    marginBottom: 'var(--spacing-md)',
-    padding: 'var(--spacing-md)',
-    border: `1px solid var(--color-border)`,
-    borderRadius: 'var(--border-radius)',
-    backgroundColor: 'var(--color-background-primary)',
- };
- const listHeaderStyle = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 'var(--spacing-sm)'
- };
- const listTitleStyle = {
-    fontSize: 'var(--font-size-lg)',
-    margin: 0
- };
- // Style for the link to make it look like the heading
- const titleLinkStyle = {
+// --- MUI Imports ---
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import CardActions from '@mui/material/CardActions';
+import CircularProgress from '@mui/material/CircularProgress';
+import Container from '@mui/material/Container';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Grid from '@mui/material/Grid';
+import IconButton from '@mui/material/IconButton';
+import Link from '@mui/material/Link'; // MUI Link
+import Typography from '@mui/material/Typography';
+import Alert from '@mui/material/Alert'; // For displaying errors
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+// --- End MUI Imports ---
+
+// Style for the project title link
+const titleLinkStyle = {
     textDecoration: 'none',
     color: 'inherit'
- };
- const listMetaStyle = {
-    color: 'var(--color-text-secondary)',
-    marginBottom: 'var(--spacing-xs)',
-    fontSize: 'var(--font-size-sm)'
- };
- const listNotesStyle = {
-    color: 'var(--color-text-secondary)',
-    marginBottom: 'var(--spacing-sm)',
-    fontSize: 'var(--font-size-sm)',
-    whiteSpace: 'pre-wrap'
- };
- const listStatusStyle = {
-    fontStyle: 'italic',
-    fontSize: 'var(--font-size-sm)'
- };
-// --- End Styles ---
-
+};
 
 function ProjectList() {
+    // --- State Variables ---
     const [projects, setProjects] = useState([]);
-    const [loading, setLoading] = useState(true); // For initial projects load
-    const [error, setError] = useState(null); // For project list/CUD errors
-    const [showCreateForm, setShowCreateForm] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false); // For form CUD submission
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [editingProject, setEditingProject] = useState(null);
-
-    // --- State for Clients Dropdown ---
     const [clients, setClients] = useState([]);
     const [clientsLoading, setClientsLoading] = useState(false);
-    const [clientsError, setClientsError] = useState(null); // Specific error for client fetching
+    const [clientsError, setClientsError] = useState(null);
+    const [dialogOpen, setDialogOpen] = useState(false);
+    // --- End State Variables ---
 
     // --- Fetch Projects ---
     const fetchProjects = useCallback(async () => {
+        // No need to set loading here as initial load state handles it
         try {
-            setError(null);
+            setError(null); // Clear previous errors
             const data = await getProjects();
-            setProjects(data);
+            setProjects(data || []); // Ensure projects is always an array
         } catch (err) {
             const message = err.response?.data?.message || err.message || 'Failed to load projects.';
-            setError(`Failed to load projects. Please ensure the backend is running. (${message})`);
+            setError(`Failed to load projects: ${message}`);
             console.error("Fetch Projects Error:", err);
+            setProjects([]); // Set empty array on error
         } finally {
-             if (loading) setLoading(false); // Turn off initial load flag
+            // Only set initial loading false once
+            if (loading) setLoading(false);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [loading]); // Re-run only if loading state flag changes (effectively runs once after mount)
+    }, [loading]); // Only run when loading flag changes (effectively once on mount)
 
-    // Initial project fetch on component mount
+    // Initial project fetch
     useEffect(() => {
-        setLoading(true); // Set loading true only before the *initial* projects fetch
+        setLoading(true); // Trigger initial load
         fetchProjects();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // Run only once
+    }, []); // Run only once on mount
 
-    // --- Function to Fetch Clients (called before showing form) ---
+    // --- Function to Fetch Clients for Form ---
     const fetchClientsForForm = useCallback(async () => {
-        // Don't proceed if already loading clients
-        if (clientsLoading) return false;
-
+        if (clientsLoading) return false; // Prevent concurrent fetches
         setClientsLoading(true);
-        setClientsError(null); // Clear previous client errors
+        setClientsError(null);
         try {
-            console.log("Fetching clients for form..."); // Debug log
+            console.log("Fetching clients for project form...");
             const clientData = await getCompanyClients();
             setClients(clientData || []);
-            console.log("Clients fetched:", clientData); // Debug log
+            console.log("Clients fetched for project form:", clientData);
             return true; // Indicate success
         } catch (error) {
             const message = error.message || 'Could not load client list.';
             setClientsError(`Error loading clients for dropdown: ${message}`);
             console.error("Fetch Clients Error:", error);
-            setClients([]); // Reset clients on error
+            setClients([]);
             return false; // Indicate failure
         } finally {
             setClientsLoading(false);
         }
-    }, [clientsLoading]); // Depend on clientsLoading to prevent race conditions
+    }, [clientsLoading]); // Dependency array
 
-    // --- Open Create Form Handler ---
-    const handleShowCreateForm = async () => {
-        setError(null); // Clear main errors
+    // --- Dialog/Form Open/Close Handlers ---
+    const handleOpenDialog = async (projectToEdit = null) => {
+        setError(null); // Clear list errors
+        setClientsError(null); // Clear previous form errors
         const success = await fetchClientsForForm(); // Fetch clients first
         if (success) {
-            setEditingProject(null); // Ensure edit mode is off
-            setShowCreateForm(true); // Show the form only if clients fetched ok
+            setEditingProject(projectToEdit); // Set null for 'Create', project obj for 'Edit'
+            setDialogOpen(true); // THEN open the dialog
         } else {
-            // Show client fetch error instead of form
+            // Show client fetch error in main error display if we couldn't open dialog
             setError(clientsError || "Failed to load data needed for the form.");
         }
     };
 
-    // --- Edit Click Handler ---
-    const handleEditClick = async (project) => {
-        setError(null); // Clear main errors
-        const success = await fetchClientsForForm(); // Fetch clients first
-        if (success) {
-            setEditingProject(project); // Set editing state AFTER clients are fetched
-            setShowCreateForm(false);
-        } else {
-             setError(clientsError || "Failed to load data needed for the form.");
-        }
+    // This single function handles closing the dialog for ANY reason (cancel, submit success, backdrop click)
+    const handleCloseDialog = () => {
+        setDialogOpen(false);
+        // Short delay allows dialog close animation before clearing data/state
+        setTimeout(() => {
+             setEditingProject(null);
+             setClientsError(null);
+             setClients([]);
+             setIsSubmitting(false); // Ensure submitting state is reset
+        }, 300); // Adjust timing if needed
     };
 
-     // --- Form Submit/Cancel Handlers ---
+    // --- Form Submit Handlers ---
     const handleCreateSubmit = async (formData) => {
-        // formData from ProjectForm now includes clientId (null if none selected)
-        setIsSubmitting(true);
-        setError(null);
+        setIsSubmitting(true); setClientsError(null); // Use clientsError for form errors
         try {
             const newProject = await createProject(formData);
             setProjects(prevProjects => [newProject, ...prevProjects]);
-            setShowCreateForm(false);
-            setClients([]); // Clear potentially stale client list cache
+            handleCloseDialog(); // Close dialog on success
         } catch (err) {
-             const message = err.response?.data?.message || err.message || 'Please check input and try again.';
-             setError(`Failed to create project. (${message})`);
+             const message = err.response?.data?.message || err.message || 'Check input.';
+             setClientsError(`Failed to create project: ${message}`); // Show error inside dialog
              console.error("Create Error:", err);
         } finally {
              setIsSubmitting(false);
@@ -185,130 +140,147 @@ function ProjectList() {
     };
 
     const handleUpdateSubmit = async (formData) => {
-        // formData from ProjectForm now includes clientId (null if none selected)
         if (!editingProject) return;
-        setIsSubmitting(true);
-        setError(null);
+        setIsSubmitting(true); setClientsError(null); // Use clientsError for form errors
         try {
             const updatedProjectData = await updateProject(editingProject.id, formData);
             setProjects(prevProjects =>
-                prevProjects.map(p =>
-                    p.id === editingProject.id ? updatedProjectData : p
-                )
+                prevProjects.map(p => p.id === editingProject.id ? updatedProjectData : p)
             );
-            setEditingProject(null);
-            setClients([]); // Clear potentially stale client list cache
+            handleCloseDialog(); // Close dialog on success
         } catch (err) {
-             const message = err.response?.data?.message || err.message || 'Please check input and try again.';
-             setError(`Failed to update project. (${message})`);
+             const message = err.response?.data?.message || err.message || 'Check input.';
+             setClientsError(`Failed to update project: ${message}`); // Show error inside dialog
              console.error("Update Error:", err);
         } finally {
              setIsSubmitting(false);
         }
     };
 
-    const handleCancelForm = () => {
-        setError(null);
-        setClientsError(null);
-        setShowCreateForm(false);
-        setEditingProject(null);
-        setClients([]); // Clear clients list when form is cancelled
-    };
-
-     // --- Delete Handler ---
-     const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this project? This action cannot be undone.')) return;
-        if (editingProject || showCreateForm || isSubmitting || clientsLoading) return; // Prevent delete while form active/submitting/loading clients
-        try { setError(null); await deleteProject(id); setProjects(prev => prev.filter(p => p.id !== id)); }
-        catch (err) { const message = err.response?.data?.message || err.message || 'Please try again.'; setError(`Failed to delete project. (${message})`); console.error("Delete Error:", err); }
+    // --- Delete Handler ---
+     const handleDelete = async (id, name) => {
+        if (!window.confirm(`Are you sure you want to delete project: "${name}"?`)) return;
+        // Prevent delete if dialog is open or loading clients for it
+        if (dialogOpen || clientsLoading || isSubmitting) return;
+        setError(null); // Clear main page errors
+        try {
+             await deleteProject(id);
+             setProjects(prev => prev.filter(p => p.id !== id));
+        } catch (err) {
+             const message = err.response?.data?.message || err.message || 'Try again.';
+             // Show delete error in main page error area
+             setError(`Failed to delete project: ${message}`);
+             console.error("Delete Error:", err);
+        }
      };
 
     // --- Rendering Logic ---
-    if (loading && projects.length === 0) return <LoadingSpinner />; // Initial page load spinner
-
-    const isFormActive = showCreateForm || !!editingProject;
-
     return (
-        <div>
-            {/* Centralized Error Display Area */}
-            {error && <div style={errorBoxStyle}>{error}</div>}
-            {clientsError && !isFormActive && <div style={errorBoxStyle}>{clientsError}</div>} {/* Show client fetch error if form couldn't open */}
+        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h4" component="h1">
+                    Projects
+                </Typography>
+                <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => handleOpenDialog(null)} // Open dialog for create
+                    disabled={clientsLoading || dialogOpen}
+                >
+                    {clientsLoading ? 'Loading...' : 'Create Project'}
+                </Button>
+            </Box>
 
+            {/* Display general page errors */}
+            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-            {/* Show Create Button only if no form is active */}
-            {!isFormActive && (
-                <button onClick={handleShowCreateForm} style={createButtonStyle} disabled={clientsLoading}>
-                    {clientsLoading ? 'Loading Clients...' : '+ Create New Project'}
-                </button>
+            {/* Loading indicator */}
+            {loading && <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box>}
+
+            {/* Grid container for project cards */}
+            {!loading && !error && projects.length === 0 && (
+                <Typography sx={{ mt: 3 }}>No projects found. Create one using the button above!</Typography>
             )}
-
-            {/* Render Form (Create or Edit) if active - Pass clients list */}
-            {isFormActive && (
-                 // Show specific loading state while clients are being fetched for the form
-                clientsLoading ? <LoadingSpinner /> : (
-                    <ProjectForm
-                        key={editingProject ? editingProject.id : 'create'}
-                        initialData={editingProject || {}}
-                        onSubmit={editingProject ? handleUpdateSubmit : handleCreateSubmit}
-                        onCancel={handleCancelForm}
-                        isSubmitting={isSubmitting}
-                        clients={clients}
-                    />
-                )
-            )}
-
-
-            {/* Project List Display */}
-            {!isFormActive && <h2>Projects</h2>}
-
-            {projects.length === 0 && !loading && !isFormActive ? (
-                 <p>No projects found. Create one using the button above!</p>
-            ) : (
-                 <ul style={{ listStyle: 'none', padding: 0 }}>
+            {!loading && !error && projects.length > 0 && (
+                <Grid container spacing={3}>
                     {projects.map((project) => (
-                        // Don't render the list item if it's the one being edited
-                        editingProject?.id === project.id ? null : (
-                            <li key={project.id} style={listItemStyle}>
-                                <div style={listHeaderStyle}>
-                                    {/* === MODIFIED PART: Project Name is now a Link === */}
-                                    <h3 style={listTitleStyle}>
-                                        <Link to={`/projects/${project.id}`} style={titleLinkStyle}>
+                        <Grid item xs={12} sm={6} md={4} key={project.id}>
+                            {/* Removed the 'item' prop as it's deprecated/unnecessary */}
+                            <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                                <CardContent sx={{ flexGrow: 1 }}>
+                                    <Typography gutterBottom variant="h6" component="h2">
+                                        <Link component={RouterLink} to={`/projects/${project.id}`} sx={titleLinkStyle}>
                                             {project.name}
                                         </Link>
-                                    </h3>
-                                    {/* === END MODIFIED PART === */}
-                                    <div>
-                                        <button
-                                            onClick={() => handleEditClick(project)}
-                                            style={editButtonStyle}
-                                            title="Edit Project"
-                                            disabled={isFormActive || isSubmitting || clientsLoading} // Disable if any form might open or is submitting
-                                        >
-                                            ✏️
-                                        </button>
-                                        <button
-                                             onClick={() => handleDelete(project.id)}
-                                             style={deleteButtonStyle}
-                                             title="Delete Project"
-                                             disabled={isFormActive || isSubmitting || clientsLoading} // Disable if any form might open or is submitting
-                                         >
-                                             🗑️
-                                         </button>
-                                    </div>
-                                </div>
-                                {/* Project Details - Client name already updated previously */}
-                                <p style={listMetaStyle}>
-                                    Client: {project.client?.name || 'N/A'}
-                                </p>
-                                {project.address && <p style={listMetaStyle}>Address: {project.address}</p>}
-                                {project.notes && <p style={listNotesStyle}>Notes: {project.notes}</p>}
-                                <p style={listStatusStyle}>Status: {project.status}</p>
-                            </li>
-                        )
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                                        Client: {project.client?.name || 'N/A'}
+                                    </Typography>
+                                     <Typography variant="body2" color="text.secondary" >
+                                        Status: {project.status}
+                                    </Typography>
+                                     {/* Optional date display */}
+                                     {(project.startDate || project.endDate) &&
+                                         <Typography variant="caption" display="block" color="text.secondary" sx={{mt: 1}}>
+                                             {project.startDate ? `Start: ${new Date(project.startDate).toLocaleDateString()}` : ''}
+                                             {(project.startDate && project.endDate) ? ` | ` : ''}
+                                             {project.endDate ? `End: ${new Date(project.endDate).toLocaleDateString()}` : ''}
+                                         </Typography>
+                                      }
+                                </CardContent>
+                                <CardActions sx={{ justifyContent: 'flex-end' }}>
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => handleOpenDialog(project)} // Open dialog for edit
+                                        disabled={clientsLoading || dialogOpen}
+                                        title="Edit Project"
+                                    >
+                                        <EditIcon fontSize="small"/>
+                                    </IconButton>
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => handleDelete(project.id, project.name)}
+                                        disabled={clientsLoading || dialogOpen || isSubmitting}
+                                        title="Delete Project"
+                                        color="error"
+                                    >
+                                        <DeleteIcon fontSize="small"/>
+                                    </IconButton>
+                                </CardActions>
+                            </Card>
+                        </Grid>
                     ))}
-                </ul>
-             )}
-        </div>
+                </Grid>
+            )}
+
+            {/* Dialog for Create/Edit Project Form */}
+            {/* Render Dialog only when needed, controlled by dialogOpen state */}
+            {dialogOpen && (
+                 <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+                    <DialogTitle>{editingProject ? 'Edit Project' : 'Create New Project'}</DialogTitle>
+                    <DialogContent>
+                        {/* Display form-specific errors */}
+                        {clientsError && <Alert severity="error" sx={{ mb: 2 }}>{clientsError}</Alert>}
+                        {/* Show spinner if clients are loading FOR the form */}
+                        {clientsLoading ? (
+                             <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box>
+                        ) : (
+                            // Render the form when clients are loaded
+                            <ProjectForm
+                                key={editingProject ? editingProject.id : 'create'} // Important for form reset
+                                initialData={editingProject || {}}
+                                onSubmit={editingProject ? handleUpdateSubmit : handleCreateSubmit}
+                                onCancel={handleCloseDialog} // Use handleCloseDialog for cancel button
+                                isSubmitting={isSubmitting}
+                                clients={clients}
+                            />
+                        )}
+                    </DialogContent>
+                    {/* DialogActions can be added here if form doesn't have own buttons */}
+                 </Dialog>
+            )}
+
+        </Container>
     );
 }
 

@@ -1,313 +1,264 @@
 // frontend/src/pages/ProjectDetailPage.jsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { getProjectById } from '../api/projectApi';
-// Import ALL Task APIs
-import { getTasksByProjectId, createTask, updateTask, deleteTask } from '../api/taskApi';
-// Import User API for assignee dropdown
-import { getCompanyUsers } from '../api/userApi';
-// Import Components
-import LoadingSpinner from '../components/common/LoadingSpinner';
-import TaskForm from '../components/forms/TaskForm';
+import { useParams, Link as RouterLink } from 'react-router-dom'; // Import RouterLink
 
-// --- Styles ---
-const errorBoxStyle = { color: 'var(--color-error)', marginBottom: 'var(--spacing-md)', padding: 'var(--spacing-md)', border: '1px solid var(--color-error)', borderRadius: 'var(--border-radius)', backgroundColor: 'rgba(220, 53, 69, 0.1)' };
-const taskListStyle = { listStyle: 'none', padding: 0, marginTop: 'var(--spacing-md)' };
-const taskItemStyle = { border: '1px solid var(--color-border)', padding: 'var(--spacing-md)', marginBottom: 'var(--spacing-sm)', borderRadius: 'var(--border-radius)'};
-const addButtonStyle = { padding: 'var(--spacing-sm) var(--spacing-md)', border: 'none', borderRadius: 'var(--border-radius)', cursor: 'pointer', fontSize: 'inherit', backgroundColor: 'var(--color-accent-primary)', color: 'white', marginBottom: 'var(--spacing-lg)' };
-const itemButtonStyle = { marginLeft: 'var(--spacing-sm)', padding: 'var(--spacing-xs) var(--spacing-sm)', border: '1px solid var(--color-border)', borderRadius: 'var(--border-radius)', cursor: 'pointer', fontSize: 'var(--font-size-sm)', backgroundColor: 'transparent', lineHeight: 1.2 };
-const editItemButtonStyle = { ...itemButtonStyle, borderColor: 'var(--color-accent-secondary)', color: 'var(--color-accent-secondary)'};
-const deleteItemButtonStyle = { ...itemButtonStyle, borderColor: 'var(--color-error)', color: 'var(--color-error)'};
-const notesContainerStyle = { marginBottom: 'var(--spacing-sm)' };
-const notesPreStyle = { whiteSpace: 'pre-wrap', margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' };
-const detailTextStyle = { fontSize: 'var(--font-size-base)', margin: 'var(--spacing-xs) 0'};
-const taskMetaStyle = { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' };
-const taskNotesStyle = { fontSize: 'var(--font-size-sm)', margin: 'var(--spacing-xs) 0 0 0', whiteSpace: 'pre-wrap' };
-// --- End Styles ---
+// --- MUI Imports ---
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Container from '@mui/material/Container';
+import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Divider from '@mui/material/Divider';
+import IconButton from '@mui/material/IconButton';
+import Link from '@mui/material/Link'; // MUI Link
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import Alert from '@mui/material/Alert';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+// --- End MUI Imports ---
+
+// API Imports
+import { getProjectById } from '../api/projectApi';
+import { getTasksByProjectId, createTask, updateTask, deleteTask } from '../api/taskApi';
+import { getCompanyUsers } from '../api/userApi';
+
+// Component Imports
+import LoadingSpinner from '../components/common/LoadingSpinner'; // Keep for main load
+import TaskForm from '../components/forms/TaskForm'; // Use the MUI-refactored TaskForm
+
+// --- Remove old style constants ---
+// const errorBoxStyle = { ... };
+// const taskListStyle = { ... };
+// const taskItemStyle = { ... };
+// const addButtonStyle = { ... };
+// const itemButtonStyle = { ... };
+// const editItemButtonStyle = { ... };
+// const deleteItemButtonStyle = { ... };
+// const notesContainerStyle = { ... };
+// const notesPreStyle = { ... };
+// const detailTextStyle = { ... };
+// const taskMetaStyle = { ... };
+// const taskNotesStyle = { ... };
+// --- End Remove Styles ---
 
 function ProjectDetailPage() {
     const { id: projectId } = useParams();
+    // --- State Variables (Keep existing state) ---
     const [project, setProject] = useState(null);
     const [tasks, setTasks] = useState([]);
     const [isLoadingProject, setIsLoadingProject] = useState(true);
     const [isLoadingTasks, setIsLoadingTasks] = useState(true);
-    const [error, setError] = useState(null); // General page/list error
-    const [showAddTaskForm, setShowAddTaskForm] = useState(false);
+    const [error, setError] = useState(null);
     const [editingTask, setEditingTask] = useState(null);
     const [isSubmittingTask, setIsSubmittingTask] = useState(false);
     const [companyUsers, setCompanyUsers] = useState([]);
-    const [formError, setFormError] = useState(null); // Specific form errors
-    const [usersLoading, setUsersLoading] = useState(false); // Loading users for form
+    const [formError, setFormError] = useState(null);
+    const [usersLoading, setUsersLoading] = useState(false);
+    // NEW: Dialog state for tasks
+    const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+    // --- End State ---
 
-    // --- Fetch Initial Project and Task Data ---
+
+    // --- Fetch Initial Project and Task Data (Keep existing logic) ---
     const loadData = useCallback(async () => {
-        if (!projectId) {
-            setError("Project ID not found in URL.");
-            setIsLoadingProject(false); setIsLoadingTasks(false); return;
-        }
-        // Reset everything on load or projectId change
+        if (!projectId) { setError("Project ID not found."); setIsLoadingProject(false); setIsLoadingTasks(false); return; }
         setIsLoadingProject(true); setIsLoadingTasks(true); setError(null); setFormError(null);
-        setProject(null); setTasks([]); setCompanyUsers([]); setShowAddTaskForm(false); setEditingTask(null);
-
+        setProject(null); setTasks([]); setCompanyUsers([]); setTaskDialogOpen(false); setEditingTask(null); // Reset all
         try {
-            // Fetch project details and tasks in parallel
-            const [projectData, taskData] = await Promise.all([
-                getProjectById(projectId),
-                getTasksByProjectId(projectId)
-            ]);
-            setProject(projectData);
-            setTasks(taskData || []); // Ensure tasks is always an array
-        } catch (err) {
-            const message = err.message || 'Failed to load project data or tasks.';
-            setError(message); // Set general page error
-            console.error("Error loading project detail/tasks:", err);
-            setProject(null); // Clear project data on error
-            setTasks([]); // Clear tasks on error
-        } finally {
-            setIsLoadingProject(false);
-            setIsLoadingTasks(false);
-        }
+            const [projectData, taskData] = await Promise.all([ getProjectById(projectId), getTasksByProjectId(projectId) ]);
+            setProject(projectData); setTasks(taskData || []);
+        } catch (err) { const msg = err.message || 'Failed load.'; setError(msg); console.error("Load Data Error:", err); }
+        finally { setIsLoadingProject(false); setIsLoadingTasks(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [projectId]); // Re-run if projectId changes
+    }, [projectId]);
 
-    // Initial Load Effect
-    useEffect(() => {
-        loadData();
-    }, [loadData]); // Depend on the stable loadData callback
+    useEffect(() => { loadData(); }, [loadData]);
 
-    // --- Fetch Users for Assignee Dropdown ---
+    // --- Fetch Users for Assignee Dropdown (Keep existing logic) ---
     const fetchUsersForForm = useCallback(async () => {
-        if (usersLoading) return false; // Prevent concurrent fetches
-        setUsersLoading(true);
-        setFormError(null); // Clear previous form errors specifically
-        try {
-            console.log("Fetching users for task form...");
-            const usersData = await getCompanyUsers(); // Fetch users
-            setCompanyUsers(usersData || []); // Ensure it's an array
-            console.log("Users fetched:", usersData);
-            return true; // Indicate success
-        } catch (error) {
-            const message = error.message || 'Could not load user list for assignee dropdown.';
-            setFormError(message); // Set specific form error
-            console.error("Fetch Users Error:", error);
-            setCompanyUsers([]); // Reset on error
-            return false; // Indicate failure
-        } finally {
-            setUsersLoading(false);
-        }
-    }, [usersLoading]); // Dependency prevents race conditions
+        if (usersLoading) return false; setUsersLoading(true); setFormError(null);
+        try { const d = await getCompanyUsers(); setCompanyUsers(d || []); return true; }
+        catch (e) { setFormError(e.message||'Could not load users.'); console.error("Fetch Users Error:",e); setCompanyUsers([]); return false; }
+        finally { setUsersLoading(false); }
+    }, [usersLoading]);
 
-    // --- Show Add Task Form Handler ---
-    const handleShowAddTaskForm = async () => {
+    // --- Task Dialog/Form Handlers ---
+    const handleOpenTaskDialog = async (taskToEdit = null) => {
         setError(null); setFormError(null); // Clear errors
-        setEditingTask(null); // Ensure edit mode is off
         const success = await fetchUsersForForm(); // Fetch users first
         if (success) {
-            setShowAddTaskForm(true); // Show form only if users loaded
+            setEditingTask(taskToEdit); // Set null for Add, task obj for Edit
+            setTaskDialogOpen(true); // Open dialog
+        } else {
+            setError(formError || "Failed to load data needed for task form."); // Show general error if user fetch fails
         }
-        // If fetch fails, formError state is set and will be displayed near the form
     };
 
-    // --- Add Task Submit Handler ---
-    const handleAddTaskSubmit = async (formData) => {
-        setIsSubmittingTask(true);
-        setFormError(null);
-        try {
-            const newTask = await createTask(formData);
-            setTasks(prevTasks => [newTask, ...prevTasks]); // Add new task to list
-            setShowAddTaskForm(false); // Hide form on success
-            setCompanyUsers([]); // Clear user list cache
-        } catch (err) {
-            const message = err.message || 'Failed to create task.';
-            setFormError(`Error creating task: ${message}. Please check details.`);
-            console.error("Create Task Error:", err);
-            // Keep form open on error
-        } finally {
+    const handleCloseTaskDialog = () => {
+        setTaskDialogOpen(false);
+        setTimeout(() => { // Delay allows animation
+            setEditingTask(null);
+            setFormError(null);
             setIsSubmittingTask(false);
-        }
-    };
-
-    // --- Cancel Add Task Handler ---
-    const handleCancelAddTask = () => {
-        setShowAddTaskForm(false);
-        setFormError(null);
-        setCompanyUsers([]); // Clear user list cache
-    };
-
-    // --- Edit Task Handlers ---
-    const handleEditTaskClick = async (task) => {
-        setError(null); setFormError(null); // Clear errors
-        setShowAddTaskForm(false); // Ensure add mode is off
-        const success = await fetchUsersForForm(); // Fetch users for dropdown
-        if (success) {
-            setEditingTask(task); // Set task to edit AFTER users are fetched
-        }
-        // If fetch fails, formError state is set and will be displayed
-    };
-
-    const handleUpdateTaskSubmit = async (formData) => {
-        if (!editingTask) return;
-        setIsSubmittingTask(true);
-        setFormError(null);
-        try {
-            // Exclude projectId as it shouldn't be updated
-            const { projectId: ignoredProjectId, ...updateData } = formData;
-            const updatedTask = await updateTask(editingTask.id, updateData);
-            // Update the task list state
-            setTasks(prevTasks =>
-                prevTasks.map(t => (t.id === editingTask.id ? updatedTask : t))
-            );
-            setEditingTask(null); // Exit edit mode
             setCompanyUsers([]); // Clear user cache
+        }, 300);
+    };
+
+    // Submit handler for BOTH Add and Edit Task form submission (called by form's onSubmit)
+    const handleTaskFormSubmit = async (formData) => {
+        setIsSubmittingTask(true); setFormError(null); setError(null);
+        try {
+            if (editingTask) { // UPDATE logic
+                const { projectId: ignoredProjectId, ...updateData } = formData; // Exclude projectId
+                const updatedTask = await updateTask(editingTask.id, updateData);
+                setTasks(prev => prev.map(t => (t.id === editingTask.id ? updatedTask : t)));
+                console.log("Task updated successfully");
+            } else { // CREATE logic
+                const newTask = await createTask(formData); // formData includes projectId from form
+                setTasks(prev => [newTask, ...prev]); // Add to list
+                console.log("Task created successfully");
+            }
+            handleCloseTaskDialog(); // Close dialog on success
         } catch (err) {
-            const message = err.message || 'Failed to update task.';
-            setFormError(`Error updating task: ${message}. Please check details.`);
-            console.error("Update Task Error:", err);
-            // Keep form open on error
+            const message = err.message || `Failed to ${editingTask ? 'update' : 'create'} task.`;
+            setFormError(`Error: ${message}`); // Show error inside dialog
+            console.error("Task Submit Error:", err);
         } finally {
             setIsSubmittingTask(false);
         }
     };
 
-    const handleCancelEditTask = () => {
-        setEditingTask(null);
-        setFormError(null);
-        setCompanyUsers([]); // Clear user cache
-    };
-
-    // --- Delete Task Handler ---
+    // --- Delete Task Handler (Keep existing logic) ---
     const handleDeleteTaskClick = async (taskId, taskTitle) => {
-        if (!window.confirm(`Are you sure you want to delete task: "${taskTitle}"?`)) {
-            return;
-        }
-        // Prevent action if another form is active/submitting/loading users
-        if (showAddTaskForm || editingTask || isSubmittingTask || usersLoading) return;
-
-        setError(null); setFormError(null); // Clear errors
-        // Consider adding a specific loading state for the row being deleted
-        try {
-            await deleteTask(taskId);
-            // Remove from list state
-            setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
-        } catch (err) {
-            const message = err.message || 'Failed to delete task.';
-            // Show delete errors in the main error area for now
-            setError(`Error deleting task: ${message}`);
-            console.error("Delete Task Error:", err);
-        } finally {
-            // Reset specific deleting state if used
-        }
+        if (!window.confirm(`Are you sure you want to delete task: "${taskTitle}"?`)) return;
+        if (taskDialogOpen || isSubmittingTask || usersLoading) return;
+        setError(null); setFormError(null);
+        try { await deleteTask(taskId); setTasks(prev => prev.filter(t => t.id !== taskId)); }
+        catch (err) { const message = err.message || 'Failed.'; setError(`Error deleting task: ${message}`); console.error("Delete Task Error:", err); }
     };
 
 
     // --- Render Logic ---
-    if (isLoadingProject) { return <LoadingSpinner />; }
-    // Show general page error if project failed loading, before checking if project exists
-    if (error && !project) { return <div style={errorBoxStyle}>{error}</div>; }
-    if (!project) { return <div><h2>Project Not Found</h2><p>Could not load project details.</p><Link to="/projects">Back to Projects</Link></div>; }
-
-    const isFormActive = showAddTaskForm || !!editingTask;
+    if (isLoadingProject) return <Container sx={{ textAlign: 'center', mt: 5 }}><CircularProgress /></Container>;
+    if (error && !project) return <Container sx={{ mt: 4 }}><Alert severity="error">{error}</Alert></Container>;
+    if (!project) return (
+        <Container sx={{ mt: 4 }}>
+            <Typography variant="h5" component="h2">Project Not Found</Typography>
+            <Typography>Could not load details for this project.</Typography>
+            <Button component={RouterLink} to="/projects" sx={{ mt: 2 }}>Back to Projects</Button>
+        </Container>
+    );
 
     return (
-        <div>
-            {/* --- Project Details --- */}
-            <h2>Project: {project.name}</h2>
-            <p style={detailTextStyle}><strong>Status:</strong> {project.status}</p>
-            <p style={detailTextStyle}><strong>Client:</strong> {project.client?.name || 'N/A'}</p>
-            <p style={detailTextStyle}>
-                <strong>Start Date:</strong> {project.startDate ? new Date(project.startDate).toLocaleDateString() : 'Not Set'}
-            </p>
-            <p style={detailTextStyle}>
-                <strong>End Date:</strong> {project.endDate ? new Date(project.endDate).toLocaleDateString() : 'Not Set'}
-            </p>
-            {project.address && <p style={detailTextStyle}><strong>Address:</strong> {project.address}</p>}
-            {project.notes &&
-                <div style={notesContainerStyle}> {/* Use div instead of p */}
-                    <strong>Notes:</strong>
-                    <pre style={notesPreStyle}>{project.notes}</pre>
-                </div>
-            }
+        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+            {/* Display general page errors (e.g., delete error) */}
+            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-            <hr style={{ margin: 'var(--spacing-xl) 0' }} />
+            {/* --- Project Details Section --- */}
+            <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
+                <Typography variant="h4" component="h1" gutterBottom>
+                    Project: {project.name}
+                </Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2, mb: 1 }}>
+                     <Typography variant="body1"><strong>Status:</strong> {project.status}</Typography>
+                     <Typography variant="body1"><strong>Client:</strong> {project.client?.name || 'N/A'}</Typography>
+                     <Typography variant="body1">
+                         <strong>Start Date:</strong> {project.startDate ? new Date(project.startDate).toLocaleDateString() : 'Not Set'}
+                     </Typography>
+                     <Typography variant="body1">
+                         <strong>End Date:</strong> {project.endDate ? new Date(project.endDate).toLocaleDateString() : 'Not Set'}
+                     </Typography>
+                 </Box>
+                 {project.address && <Typography variant="body1" sx={{mb:1}}><strong>Address:</strong> {project.address}</Typography>}
+                 {project.notes &&
+                    <Box sx={{ mb: 1 }}>
+                        <Typography variant="body1"><strong>Notes:</strong></Typography>
+                        {/* Use Typography for notes, respecting whitespace */}
+                        <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', color: 'text.secondary' }}>
+                            {project.notes}
+                        </Typography>
+                    </Box>
+                 }
+                {/* Add other project details using Typography */}
+            </Paper>
+            {/* --- End Project Details Section --- */}
+
 
             {/* --- Tasks Section --- */}
-            <h3>Tasks for this Project</h3>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, mt: 4 }}>
+                 <Typography variant="h5" component="h2">Tasks</Typography>
+                 <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => handleOpenTaskDialog(null)} // Open dialog for create
+                    disabled={taskDialogOpen || usersLoading}
+                >
+                   {usersLoading ? 'Loading...' : 'Add Task'}
+                </Button>
+            </Box>
 
-            {/* Add Task Button / Add Form / Edit Form */}
-            {!isFormActive && (
-                 <button onClick={handleShowAddTaskForm} style={addButtonStyle} disabled={usersLoading}>
-                    {usersLoading ? 'Loading Users...' : '+ Add New Task'}
-                </button>
-            )}
-
-            {/* Display form-specific errors first */}
-            {formError && <div style={errorBoxStyle}>{formError}</div>}
-
-            {/* Show loading spinner while users are loading for the form */}
-            {usersLoading && isFormActive && <LoadingSpinner />}
-
-            {/* Render Add Form (only if not loading users) */}
-            {showAddTaskForm && !usersLoading && (
-                <TaskForm
-                    onSubmit={handleAddTaskSubmit}
-                    onCancel={handleCancelAddTask}
-                    isSubmitting={isSubmittingTask}
-                    companyUsers={companyUsers}
-                    projectId={projectId}
-                    key="add-task-form" // Stable key for add form
-                />
-            )}
-
-            {/* Render Edit Form (only if not loading users) */}
-            {editingTask && !usersLoading && (
-                 <TaskForm
-                    onSubmit={handleUpdateTaskSubmit}
-                    onCancel={handleCancelEditTask}
-                    isSubmitting={isSubmittingTask}
-                    initialData={editingTask}
-                    companyUsers={companyUsers}
-                    projectId={projectId}
-                    key={editingTask.id} // Key changes when task changes
-                />
-            )}
+            {/* Display Task form errors here */}
+             {formError && !taskDialogOpen && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
 
             {/* Task List Area */}
-            {isLoadingTasks ? (
-                <LoadingSpinner />
-            ) : tasks.length === 0 ? (
-                <p style={{ marginTop: isFormActive ? 'var(--spacing-lg)' : '0' }}>
-                    No tasks found for this project yet.
-                </p>
-            ) : (
-                <ul style={taskListStyle}>
+            {isLoadingTasks ? ( <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box> ) :
+             tasks.length === 0 ? ( <Typography sx={{ mt: 2, fontStyle: 'italic' }}>No tasks found for this project yet.</Typography> ) :
+             (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                     {tasks.map(task => (
-                        // Hide list item if it's being edited
-                        editingTask?.id === task.id ? null : (
-                        <li key={task.id} style={taskItemStyle}>
-                            {/* Task Content */}
-                            <div>
-                                <strong>{task.title}</strong>
-                                <span style={{ ...taskMetaStyle, marginLeft: 'var(--spacing-sm)' }}>({task.status.replace('_', ' ')})</span>
-                            </div>
-                            {/* Task Meta Info (Assignee, Dates) */}
-                            <div style={taskMetaStyle}>
-                                {task.assignee && <span>Assigned to: {task.assignee.name || task.assignee.email}</span>}
-                                {task.startDate && <span style={{ marginLeft: task.assignee ? 'var(--spacing-md)' : '0' }}>Start: {new Date(task.startDate).toLocaleDateString()}</span>}
-                                {task.endDate && <span style={{ marginLeft: task.startDate || task.assignee ? 'var(--spacing-md)' : '0' }}>End/Due: {new Date(task.endDate).toLocaleDateString()}</span>}
-                            </div>
-                            {/* Task Notes */}
-                            {task.notes && <p style={taskNotesStyle}>{task.notes}</p>}
-                             {/* Task Action Buttons */}
-                             <div style={{marginTop: 'var(--spacing-sm)'}}>
-                                <button onClick={() => handleEditTaskClick(task)} style={editItemButtonStyle} disabled={isFormActive || isSubmittingTask || usersLoading} title="Edit Task">Edit</button>
-                                <button onClick={() => handleDeleteTaskClick(task.id, task.title)} style={deleteItemButtonStyle} disabled={isFormActive || isSubmittingTask || usersLoading} title="Delete Task">Delete</button>
-                             </div>
-                        </li>
-                        )
+                        // Hide task if its form is open in the dialog
+                         editingTask?.id === task.id ? null : (
+                        <Paper variant="outlined" sx={{ p: 2 }} key={task.id}>
+                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                 <Box>
+                                     <Typography variant="subtitle1" component="div" sx={{ fontWeight: 'bold' }}>{task.title}</Typography>
+                                     <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>({task.status.replace('_', ' ')})</Typography>
+                                     {task.assignee && <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>Assignee: {task.assignee.name || task.assignee.email}</Typography>}
+                                     {task.startDate && <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>Start: {new Date(task.startDate).toLocaleDateString()}</Typography>}
+                                     {task.endDate && <Typography variant="caption" color="text.secondary">End/Due: {new Date(task.endDate).toLocaleDateString()}</Typography>}
+                                 </Box>
+                                 <Box sx={{ whiteSpace: 'nowrap', mt: -1, mr: -1 }}> {/* Keep buttons together */}
+                                      <IconButton size="small" onClick={() => handleEditTaskClick(task)} disabled={taskDialogOpen || isSubmittingTask || usersLoading} title="Edit Task"> <EditIcon fontSize="small"/> </IconButton>
+                                      <IconButton size="small" onClick={() => handleDeleteTaskClick(task.id, task.title)} disabled={taskDialogOpen || isSubmittingTask || usersLoading} title="Delete Task" color="error"> <DeleteIcon fontSize="small"/> </IconButton>
+                                 </Box>
+                             </Box>
+                             {task.notes && <Typography variant="body2" sx={{ mt: 1, whiteSpace: 'pre-wrap' }}>{task.notes}</Typography>}
+                        </Paper>
+                         )
                     ))}
-                </ul>
-            )}
-        </div>
+                </Box>
+             )}
+            {/* --- End Tasks Section --- */}
+
+            {/* Dialog for Add/Edit Task Form */}
+            {/* Render Dialog only when needed */}
+            <Dialog open={taskDialogOpen} onClose={handleCloseTaskDialog} maxWidth="sm" fullWidth>
+                <DialogTitle>{editingTask ? 'Edit Task' : 'Add New Task'}</DialogTitle>
+                <DialogContent>
+                     {/* Display form-specific errors */}
+                    {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+                     {/* Show spinner if users are loading specifically FOR the form */}
+                    {usersLoading ? (
+                         <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box>
+                    ) : (
+                        <TaskForm
+                            key={editingTask ? editingTask.id : 'add-task'} // Reset form on change
+                            initialData={editingTask || {}}
+                            onSubmit={handleTaskFormSubmit} // Unified submit handler
+                            onCancel={handleCloseTaskDialog} // Unified close handler
+                            isSubmitting={isSubmittingTask}
+                            companyUsers={companyUsers}
+                            projectId={projectId} // Always pass project ID
+                        />
+                    )}
+                </DialogContent>
+            </Dialog>
+
+        </Container>
     );
 }
 
