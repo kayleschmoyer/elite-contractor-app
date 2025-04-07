@@ -1,19 +1,16 @@
 // backend/src/middleware/validationMiddleware.js
 import logger from '../utils/logger.js';
+// No need to import 'z' here, the schema is passed in
 
 /**
  * Higher-order function to create an Express middleware for validating
- * request data (body, params, query) against a Zod schema.
- *
- * Assumes the schema passed has properties like 'body', 'params', 'query'
- * matching the parts of the request to validate.
- *
- * @param {z.ZodObject<any>} schema - The Zod schema to validate against.
+ * request data against a Zod schema.
+ * @param {z.ZodObject<any>} schema - The Zod schema (e.g., { body: ..., params: ..., query: ... }).
  * @returns Express middleware function
  */
 export const validate = (schema) => async (req, res, next) => {
     try {
-        // Create an object with parts of the request to validate based on schema keys
+        // Prepare object with parts of request defined in the schema shape
         const requestDataToValidate = {};
         if (schema.shape.body) {
             requestDataToValidate.body = req.body;
@@ -25,38 +22,51 @@ export const validate = (schema) => async (req, res, next) => {
             requestDataToValidate.query = req.query;
         }
 
-        // Validate the relevant parts of the request
+        // Validate asynchronously
         const validationResult = await schema.safeParseAsync(requestDataToValidate);
 
         if (!validationResult.success) {
-            // Format errors for a user-friendly response
-            // Use flatten() for a simpler structure { fieldErrors: ..., formErrors: ... }
+            // Format errors using Zod's flatten() for field-specific errors
             const formattedErrors = validationResult.error.flatten().fieldErrors;
-            logger.warn('Request validation failed:', formattedErrors);
+            logger.warn('Request validation failed:', {
+                 path: req.originalUrl,
+                 errors: formattedErrors
+                 });
             return res.status(400).json({
                 message: "Validation failed",
                 errors: formattedErrors,
             });
         }
 
-        // --- IMPORTANT: Overwrite request parts with validated (and potentially transformed) data ---
-        // This ensures controllers/services get type-safe, validated data.
+        // --- Overwrite request parts with VALIDATED data ---
+        // This ensures type coercion and defaults from Zod are used downstream
         if (validationResult.data.body) {
             req.body = validationResult.data.body;
         }
         if (validationResult.data.params) {
             req.params = validationResult.data.params;
         }
+
+        // --- CORRECTED QUERY HANDLING ---
         if (validationResult.data.query) {
-            req.query = validationResult.data.query;
+            // Instead of replacing req.query, merge validated properties onto it
+            // This avoids the "Cannot set property query...getter" error
+            Object.assign(req.query, validationResult.data.query);
+
+            // Alternative (more explicit loop):
+            // for (const key in validationResult.data.query) {
+            //     if (Object.hasOwnProperty.call(validationResult.data.query, key)) {
+            //          req.query[key] = validationResult.data.query[key];
+            //     }
+            //  }
         }
-        // --- End Overwrite ---
+        // --- END CORRECTION ---
 
         // Proceed to the next middleware or route handler
         return next();
 
     } catch (error) {
-         // Catch unexpected errors during validation itself
+         // Catch unexpected errors during validation/parsing
          logger.error('Error in validation middleware:', error);
          // Pass to the global error handler
          next(error);

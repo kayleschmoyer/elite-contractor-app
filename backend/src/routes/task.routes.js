@@ -2,29 +2,56 @@
 import { Router } from 'express';
 import TaskController from '../controllers/task.controller.js';
 import authMiddleware from '../middleware/authMiddleware.js';
+// --- Import Validation ---
+import { validate } from '../middleware/validationMiddleware.js';
+import {
+    createTaskSchema,
+    updateTaskSchema,
+    taskIdParamSchema,
+    getTasksQuerySchema
+} from '../validations/task.validations.js';
+// --- End Imports ---
 
 const router = Router();
 
-// Apply authentication middleware to ALL task routes
+// Apply authentication middleware to ALL task routes first
 router.use(authMiddleware);
 
-// Define routes for /api/tasks
+// --- Define Task CRUD routes with Validation ---
 
 // POST /api/tasks - Create a new task
-router.post('/', TaskController.createTaskController);
+// Validate request body using createTaskSchema
+router.post(
+    '/',
+    validate(createTaskSchema),
+    TaskController.createTaskController
+);
 
-// GET /api/tasks - Get tasks for a specific project (requires ?projectId=...)
-router.get('/', TaskController.getTasksController);
-
-// --- NEW: Update and Delete Routes ---
+// GET /api/tasks - Get tasks (by project OR all dated for company)
+// Validate query parameters (e.g., optional projectId) using getTasksQuerySchema
+router.get(
+    '/',
+    validate(getTasksQuerySchema), // Add validation for query params
+    TaskController.getTasksController
+);
 
 // PUT /api/tasks/:id - Update a specific task
-router.put('/:id', TaskController.updateTaskController);
+// Validate URL param 'id' AND request body using updateTaskSchema
+router.put(
+    '/:id',
+    validate(updateTaskSchema),
+    TaskController.updateTaskController
+);
 
 // DELETE /api/tasks/:id - Delete a specific task
-router.delete('/:id', TaskController.deleteTaskController);
+// Validate URL param 'id' using taskIdParamSchema
+router.delete(
+    '/:id',
+    validate(taskIdParamSchema),
+    TaskController.deleteTaskController
+);
 
 // --- Add GET /:id later if needed for fetching a single task directly ---
-// router.get('/:id', TaskController.getTaskByIdController);
+// Example: router.get('/:id', validate(taskIdParamSchema), TaskController.getTaskByIdController);
 
 export default router;
